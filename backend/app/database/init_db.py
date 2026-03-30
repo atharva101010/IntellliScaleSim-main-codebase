@@ -3,6 +3,8 @@ from sqlalchemy.engine import Engine
 
 
 def ensure_columns(engine: Engine):
+	if engine.dialect.name == 'sqlite':
+		return
 	# Lightweight, idempotent column checks. Replace with Alembic in production.
 	with engine.connect() as conn:
 		user_cols = conn.execute(text("""

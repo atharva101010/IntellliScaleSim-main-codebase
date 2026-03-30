@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     BACKEND_HOST: str = "0.0.0.0"
     BACKEND_PORT: int = 8000
 
-    # Default now targets local Postgres (non-Docker). Override via env when containerized.
-    DATABASE_URL: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/intelliscalesim"
+    # Default uses local SQLite file. Override via .env for PostgreSQL in production.
+    DATABASE_URL: str = "sqlite:///./app.db"
 
     CORS_ORIGINS: str = "*"
 
