@@ -14,8 +14,6 @@ interface ScalingPolicy {
     max_replicas: number
     cooldown_period: number
     evaluation_period: number
-    load_balancer_enabled: boolean
-    load_balancer_port: number | null
     created_at: string
     last_scaled_at: string | null
 }
@@ -46,7 +44,6 @@ export default function AutoScaling() {
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
 
-    // Form state
     const [formData, setFormData] = useState({
         container_id: '',
         scale_up_cpu_threshold: 80,
@@ -56,43 +53,42 @@ export default function AutoScaling() {
         min_replicas: 1,
         max_replicas: 8,
         cooldown_period: 300,
-        evaluation_period: 60,
-        load_balancer_enabled: true,
-        load_balancer_port: ''
+        evaluation_period: 60
     })
 
     const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
     useEffect(() => {
-        fetchPolicies()
-        fetchEvents()
-        fetchContainers()
+        fetchData()
     }, [])
+
+    const fetchData = async () => {
+        try {
+            await Promise.all([
+                fetchContainers(),
+                fetchPolicies(),
+                fetchEvents()
+            ])
+        } finally {
+            setLoading(false)
+        }
+    }
 
     const fetchContainers = async () => {
         try {
-            console.log('Fetching containers from:', `${API_BASE}/containers`)
             const res = await axios.get(`${API_BASE}/containers`, {
                 headers: { Authorization: `Bearer ${token}` }
             })
-            console.log('Containers API response:', res.data)
-            console.log('Is array?', Array.isArray(res.data))
-            console.log('Length:', res.data?.length)
-
-            // Handle both array and object responses
             let containerList: Container[] = []
             if (Array.isArray(res.data)) {
-                containerList = res.data
-            } else if (res.data && typeof res.data === 'object') {
-                // Maybe it's wrapped in an object like { containers: [...] }
-                containerList = res.data.containers || Object.values(res.data)
+                containerList = res.data.filter((c: Container) => c.status === 'running')
+            } else if (res.data?.containers) {
+                containerList = res.data.containers.filter((c: Container) => c.status === 'running')
             }
-
-            console.log('Final container list:', containerList)
             setContainers(containerList)
         } catch (error) {
             console.error('Error fetching containers:', error)
-            setContainers([]) // Set empty array on error
+            setContainers([])
         }
     }
 
@@ -104,14 +100,12 @@ export default function AutoScaling() {
             setPolicies(res.data)
         } catch (error) {
             console.error('Error fetching policies:', error)
-        } finally {
-            setLoading(false)
         }
     }
 
     const fetchEvents = async () => {
         try {
-            const res = await axios.get(`${API_BASE}/autoscaling/events?limit=10`, {
+            const res = await axios.get(`${API_BASE}/autoscaling/events?limit=20`, {
                 headers: { Authorization: `Bearer ${token}` }
             })
             setEvents(res.data)
@@ -122,23 +116,15 @@ export default function AutoScaling() {
 
     const createPolicy = async (e: React.FormEvent) => {
         e.preventDefault()
-
         try {
             const payload = {
                 ...formData,
-                container_id: parseInt(formData.container_id),
-                load_balancer_port: formData.load_balancer_port ? parseInt(formData.load_balancer_port) : null
+                container_id: parseInt(formData.container_id)
             }
-
             await axios.post(`${API_BASE}/autoscaling/policies`, payload, {
                 headers: { Authorization: `Bearer ${token}` }
             })
-
             setShowModal(false)
-            fetchPolicies()
-            fetchContainers()
-
-            // Reset form
             setFormData({
                 container_id: '',
                 scale_up_cpu_threshold: 80,
@@ -148,12 +134,10 @@ export default function AutoScaling() {
                 min_replicas: 1,
                 max_replicas: 8,
                 cooldown_period: 300,
-                evaluation_period: 60,
-                load_balancer_enabled: true,
-                load_balancer_port: ''
+                evaluation_period: 60
             })
+            fetchPolicies()
         } catch (error: any) {
-            console.error('Error creating policy:', error)
             alert(error.response?.data?.detail || 'Failed to create policy')
         }
     }
@@ -172,329 +156,284 @@ export default function AutoScaling() {
     }
 
     const deletePolicy = async (policyId: number) => {
-        if (!confirm('Are you sure you want to delete this policy?')) return
-
+        if (!confirm('Delete this policy?')) return
         try {
             await axios.delete(`${API_BASE}/autoscaling/policies/${policyId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             })
             fetchPolicies()
-            fetchContainers()
         } catch (error) {
             console.error('Error deleting policy:', error)
         }
     }
 
     if (loading) {
-        return <div className="p-8">Loading...</div>
+        return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><span className="text-gray-600">Loading...</span></div>
     }
 
     return (
-        <div className="p-8">
-            <div className="mb-8 flex justify-between items-center">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900">Auto-Scaling</h1>
-                    <p className="text-slate-600 mt-2">Manage container auto-scaling policies</p>
+        <div className="min-h-screen bg-gray-50 p-6">
+            <div className="max-w-6xl mx-auto">
+                {/* Header */}
+                <div className="mb-8">
+                    <h1 className="text-4xl font-bold text-gray-900 mb-2">⚙️ Auto-Scaling Policies</h1>
+                    <p className="text-gray-600">Manage container auto-scaling based on resource usage</p>
                 </div>
-                <button
-                    onClick={() => setShowModal(true)}
-                    className="bg-rose-500 text-white px-4 py-2 rounded-lg hover:bg-rose-600 font-medium"
-                >
-                    + Create Policy
-                </button>
-            </div>
 
-            {/* Active Policies */}
-            <div className="bg-white rounded-lg shadow p-6 mb-8">
-                <h2 className="text-xl font-semibold mb-4">Active Policies</h2>
+                {/* Action Button */}
+                <div className="mb-6 flex justify-end">
+                    <button
+                        onClick={() => setShowModal(true)}
+                        className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transition"
+                    >
+                        + Create Policy
+                    </button>
+                </div>
 
-                {policies.length === 0 ? (
-                    <p className="text-slate-500">No auto-scaling policies configured</p>
-                ) : (
-                    <div className="space-y-4">
-                        {policies.map((policy) => (
-                            <div key={policy.id} className="border rounded-lg p-4">
-                                <div className="flex justify-between items-start mb-3">
+                {/* Policies Grid */}
+                <div className="grid grid-cols-1 gap-6 mb-8">
+                    {policies.length === 0 ? (
+                        <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+                            No scaling policies configured yet
+                        </div>
+                    ) : (
+                        policies.map((policy) => (
+                            <div key={policy.id} className="bg-white rounded-lg shadow p-6 hover:shadow-md transition">
+                                <div className="flex justify-between items-start mb-4">
                                     <div>
-                                        <h3 className="font-semibold">Policy #{policy.id}</h3>
-                                        <p className="text-sm text-slate-500">Container ID: {policy.container_id}</p>
+                                        <h3 className="text-lg font-bold text-gray-900">Policy #{policy.id}</h3>
+                                        <p className="text-sm text-gray-600">Container ID: {policy.container_id}</p>
                                     </div>
                                     <div className="flex gap-2">
                                         <button
                                             onClick={() => togglePolicy(policy.id)}
-                                            className={`px-4 py-2 rounded-lg text-sm font-medium ${policy.enabled
-                                                ? 'bg-green-100 text-green-800'
-                                                : 'bg-gray-100 text-gray-800'
-                                                }`}
+                                            className={`px-4 py-2 rounded text-sm font-semibold ${
+                                                policy.enabled
+                                                    ? 'bg-green-100 text-green-800'
+                                                    : 'bg-gray-100 text-gray-800'
+                                            }`}
                                         >
-                                            {policy.enabled ? 'Enabled' : 'Disabled'}
+                                            {policy.enabled ? '✓ Enabled' : 'Disabled'}
                                         </button>
                                         <button
                                             onClick={() => deletePolicy(policy.id)}
-                                            className="px-4 py-2 rounded-lg text-sm font-medium bg-red-100 text-red-800 hover:bg-red-200"
+                                            className="px-4 py-2 rounded text-sm font-semibold bg-red-100 text-red-800 hover:bg-red-200"
                                         >
                                             Delete
                                         </button>
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                                    <div>
-                                        <p className="text-slate-500">Scale Up CPU</p>
-                                        <p className="font-semibold">{policy.scale_up_cpu_threshold}%</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-slate-500">Scale Up Memory</p>
-                                        <p className="font-semibold">{policy.scale_up_memory_threshold}%</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-slate-500">Scale Down CPU</p>
-                                        <p className="font-semibold">{policy.scale_down_cpu_threshold}%</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-slate-500">Scale Down Memory</p>
-                                        <p className="font-semibold">{policy.scale_down_memory_threshold}%</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-slate-500">Min Replicas</p>
-                                        <p className="font-semibold">{policy.min_replicas}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-slate-500">Max Replicas</p>
-                                        <p className="font-semibold">{policy.max_replicas}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-slate-500">Cooldown</p>
-                                        <p className="font-semibold">{policy.cooldown_period}s</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-slate-500">Evaluation</p>
-                                        <p className="font-semibold">{policy.evaluation_period}s</p>
-                                    </div>
+                                <div className="grid grid-cols-4 md:grid-cols-8 gap-4 text-sm">
+                                    {[
+                                        { label: 'Scale Up CPU', value: `${policy.scale_up_cpu_threshold}%` },
+                                        { label: 'Scale Up Mem', value: `${policy.scale_up_memory_threshold}%` },
+                                        { label: 'Scale Down CPU', value: `${policy.scale_down_cpu_threshold}%` },
+                                        { label: 'Scale Down Mem', value: `${policy.scale_down_memory_threshold}%` },
+                                        { label: 'Min', value: policy.min_replicas },
+                                        { label: 'Max', value: policy.max_replicas },
+                                        { label: 'Cooldown', value: `${policy.cooldown_period}s` },
+                                        { label: 'Eval Period', value: `${policy.evaluation_period}s` }
+                                    ].map((item, i) => (
+                                        <div key={i} className="bg-gray-50 p-3 rounded">
+                                            <p className="text-xs text-gray-600 font-semibold">{item.label}</p>
+                                            <p className="text-lg font-bold text-gray-900">{item.value}</p>
+                                        </div>
+                                    ))}
                                 </div>
 
                                 {policy.last_scaled_at && (
-                                    <p className="mt-3 text-sm text-slate-500">
+                                    <p className="mt-4 text-xs text-gray-600">
                                         Last scaled: {new Date(policy.last_scaled_at).toLocaleString()}
                                     </p>
                                 )}
                             </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+                        ))
+                    )}
+                </div>
 
-            {/* Recent Scaling Events */}
-            <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-xl font-semibold mb-4">Recent Scaling Events</h2>
-
-                {events.length === 0 ? (
-                    <p className="text-slate-500">No scaling events yet</p>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead>
-                                <tr className="border-b">
-                                    <th className="text-left py-2 px-4">Time</th>
-                                    <th className="text-left py-2 px-4">Action</th>
-                                    <th className="text-left py-2 px-4">Trigger</th>
-                                    <th className="text-left py-2 px-4">Value</th>
-                                    <th className="text-left py-2 px-4">Replicas</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {events.map((event) => (
-                                    <tr key={event.id} className="border-b hover:bg-slate-50">
-                                        <td className="py-2 px-4 text-sm">
-                                            {new Date(event.created_at).toLocaleString()}
-                                        </td>
-                                        <td className="py-2 px-4">
-                                            <span
-                                                className={`px-2 py-1 rounded text-sm ${event.action === 'scale_up'
-                                                    ? 'bg-green-100 text-green-800'
-                                                    : 'bg-blue-100 text-blue-800'
-                                                    }`}
-                                            >
-                                                {event.action}
-                                            </span>
-                                        </td>
-                                        <td className="py-2 px-4 text-sm capitalize">{event.trigger_metric}</td>
-                                        <td className="py-2 px-4 text-sm">{event.metric_value.toFixed(1)}%</td>
-                                        <td className="py-2 px-4 text-sm">
-                                            {event.replica_count_before} → {event.replica_count_after}
-                                        </td>
+                {/* Recent Events */}
+                <div className="bg-white rounded-lg shadow p-6">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-4">Recent Scaling Events</h2>
+                    {events.length === 0 ? (
+                        <p className="text-gray-500 text-center py-8">No scaling events yet</p>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b-2 border-gray-200">
+                                        <th className="text-left py-3 px-4 font-bold text-gray-900">Timestamp</th>
+                                        <th className="text-left py-3 px-4 font-bold text-gray-900">Action</th>
+                                        <th className="text-left py-3 px-4 font-bold text-gray-900">Trigger</th>
+                                        <th className="text-left py-3 px-4 font-bold text-gray-900">Value</th>
+                                        <th className="text-left py-3 px-4 font-bold text-gray-900">Replicas</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+                                </thead>
+                                <tbody>
+                                    {events.map((event) => (
+                                        <tr key={event.id} className="border-b border-gray-200 hover:bg-gray-50">
+                                            <td className="py-3 px-4">{new Date(event.created_at).toLocaleString()}</td>
+                                            <td className="py-3 px-4">
+                                                <span className={`px-3 py-1 rounded text-xs font-bold ${
+                                                    event.action === 'scale_up'
+                                                        ? 'bg-green-100 text-green-800'
+                                                        : 'bg-blue-100 text-blue-800'
+                                                }`}>
+                                                    {event.action === 'scale_up' ? '📈 UP' : '📉 DOWN'}
+                                                </span>
+                                            </td>
+                                            <td className="py-3 px-4">{event.trigger_metric}</td>
+                                            <td className="py-3 px-4 font-bold">{event.metric_value.toFixed(1)}%</td>
+                                            <td className="py-3 px-4 font-bold">{event.replica_count_before} → {event.replica_count_after}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
 
-            {/* Create Policy Modal */}
-            {showModal && (
-                <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
-                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-                        <div className="p-6">
-                            <h2 className="text-2xl font-bold mb-4">Create Auto-Scaling Policy</h2>
+                {/* Modal */}
+                {showModal && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                        <div className="bg-white rounded-lg max-w-2xl w-full shadow-xl overflow-hidden">
+                            {/* Header */}
+                            <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-6 flex items-center justify-between">
+                                <h2 className="text-2xl font-bold">+ Create Auto-Scaling Policy</h2>
+                                <button onClick={() => setShowModal(false)} className="text-2xl hover:opacity-80">×</button>
+                            </div>
 
-                            <form onSubmit={createPolicy} className="space-y-4">
+                            {/* Form */}
+                            <form onSubmit={createPolicy} className="p-8 space-y-6">
+                                {/* Container */}
                                 <div>
-                                    <label className="block text-sm font-medium mb-1">Container</label>
+                                    <label className="block text-sm font-bold text-gray-900 mb-2 uppercase">SELECT CONTAINER</label>
                                     <select
                                         required
                                         value={formData.container_id}
                                         onChange={(e) => setFormData({ ...formData, container_id: e.target.value })}
-                                        className="w-full border rounded-lg px-3 py-2 bg-white"
+                                        className="w-full border border-gray-300 rounded px-4 py-3 font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     >
-                                        <option value="">Select a container</option>
-                                        {containers.map((container) => (
-                                            <option key={container.id} value={container.id}>
-                                                {container.name} (ID: {container.id})
-                                            </option>
-                                        ))}
+                                        <option value="">Choose running container...</option>
+                                        {containers.length === 0 ? (
+                                            <option disabled>No running containers</option>
+                                        ) : (
+                                            containers.map((c) => (
+                                                <option key={c.id} value={c.id}>
+                                                    🚀 {c.name}
+                                                </option>
+                                            ))
+                                        )}
                                     </select>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Scale Up CPU Threshold (%)</label>
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            min="0"
-                                            max="100"
-                                            value={formData.scale_up_cpu_threshold}
-                                            onChange={(e) => setFormData({ ...formData, scale_up_cpu_threshold: parseFloat(e.target.value) })}
-                                            className="w-full border rounded-lg px-3 py-2 bg-white"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Scale Up Memory Threshold (%)</label>
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            min="0"
-                                            max="100"
-                                            value={formData.scale_up_memory_threshold}
-                                            onChange={(e) => setFormData({ ...formData, scale_up_memory_threshold: parseFloat(e.target.value) })}
-                                            className="w-full border rounded-lg px-3 py-2 bg-white"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Scale Down CPU Threshold (%)</label>
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            min="0"
-                                            max="100"
-                                            value={formData.scale_down_cpu_threshold}
-                                            onChange={(e) => setFormData({ ...formData, scale_down_cpu_threshold: parseFloat(e.target.value) })}
-                                            className="w-full border rounded-lg px-3 py-2 bg-white"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Scale Down Memory Threshold (%)</label>
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            min="0"
-                                            max="100"
-                                            value={formData.scale_down_memory_threshold}
-                                            onChange={(e) => setFormData({ ...formData, scale_down_memory_threshold: parseFloat(e.target.value) })}
-                                            className="w-full border rounded-lg px-3 py-2 bg-white"
-                                        />
+                                {/* Scale Up */}
+                                <div className="bg-green-50 p-4 rounded border border-green-200">
+                                    <h3 className="font-bold text-green-900 mb-4">📈 Scale Up Thresholds</h3>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-2">CPU (%)</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                value={formData.scale_up_cpu_threshold}
+                                                onChange={(e) => setFormData({ ...formData, scale_up_cpu_threshold: parseFloat(e.target.value) })}
+                                                className="w-full border border-gray-300 rounded px-3 py-2 font-semibold"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Memory (%)</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                value={formData.scale_up_memory_threshold}
+                                                onChange={(e) => setFormData({ ...formData, scale_up_memory_threshold: parseFloat(e.target.value) })}
+                                                className="w-full border border-gray-300 rounded px-3 py-2 font-semibold"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Min Replicas (1-8)</label>
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            max="8"
-                                            value={formData.min_replicas}
-                                            onChange={(e) => setFormData({ ...formData, min_replicas: parseInt(e.target.value) })}
-                                            className="w-full border rounded-lg px-3 py-2 bg-white"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Max Replicas (1-8)</label>
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            max="8"
-                                            value={formData.max_replicas}
-                                            onChange={(e) => setFormData({ ...formData, max_replicas: parseInt(e.target.value) })}
-                                            className="w-full border rounded-lg px-3 py-2 bg-white"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Cooldown Period (seconds)</label>
-                                        <input
-                                            type="number"
-                                            min="60"
-                                            value={formData.cooldown_period}
-                                            onChange={(e) => setFormData({ ...formData, cooldown_period: parseInt(e.target.value) })}
-                                            className="w-full border rounded-lg px-3 py-2 bg-white"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Evaluation Period (seconds)</label>
-                                        <input
-                                            type="number"
-                                            min="30"
-                                            value={formData.evaluation_period}
-                                            onChange={(e) => setFormData({ ...formData, evaluation_period: parseInt(e.target.value) })}
-                                            className="w-full border rounded-lg px-3 py-2 bg-white"
-                                        />
+                                {/* Scale Down */}
+                                <div className="bg-blue-50 p-4 rounded border border-blue-200">
+                                    <h3 className="font-bold text-blue-900 mb-4">📉 Scale Down Thresholds</h3>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-2">CPU (%)</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                value={formData.scale_down_cpu_threshold}
+                                                onChange={(e) => setFormData({ ...formData, scale_down_cpu_threshold: parseFloat(e.target.value) })}
+                                                className="w-full border border-gray-300 rounded px-3 py-2 font-semibold"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Memory (%)</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                value={formData.scale_down_memory_threshold}
+                                                onChange={(e) => setFormData({ ...formData, scale_down_memory_threshold: parseFloat(e.target.value) })}
+                                                className="w-full border border-gray-300 rounded px-3 py-2 font-semibold"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        id="lb_enabled"
-                                        checked={formData.load_balancer_enabled}
-                                        onChange={(e) => setFormData({ ...formData, load_balancer_enabled: e.target.checked })}
-                                        className="rounded"
-                                    />
-                                    <label htmlFor="lb_enabled" className="text-sm font-medium">Enable Load Balancer</label>
+                                {/* Replica Config */}
+                                <div className="bg-purple-50 p-4 rounded border border-purple-200">
+                                    <h3 className="font-bold text-purple-900 mb-4">📊 Replica Configuration</h3>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Min</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                value={formData.min_replicas}
+                                                onChange={(e) => setFormData({ ...formData, min_replicas: parseInt(e.target.value) })}
+                                                className="w-full border border-gray-300 rounded px-3 py-2 font-semibold text-center"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Max</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                value={formData.max_replicas}
+                                                onChange={(e) => setFormData({ ...formData, max_replicas: parseInt(e.target.value) })}
+                                                className="w-full border border-gray-300 rounded px-3 py-2 font-semibold text-center"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Cooldown (s)</label>
+                                            <input
+                                                type="number"
+                                                min="10"
+                                                value={formData.cooldown_period}
+                                                onChange={(e) => setFormData({ ...formData, cooldown_period: parseInt(e.target.value) })}
+                                                className="w-full border border-gray-300 rounded px-3 py-2 font-semibold text-center"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
 
-                                {formData.load_balancer_enabled && (
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Load Balancer Port (optional)</label>
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            max="65535"
-                                            value={formData.load_balancer_port}
-                                            onChange={(e) => setFormData({ ...formData, load_balancer_port: e.target.value })}
-                                            className="w-full border rounded-lg px-3 py-2 bg-white"
-                                            placeholder="Leave empty for auto-assign"
-                                        />
-                                    </div>
-                                )}
-
-                                <div className="flex gap-3 pt-4">
+                                {/* Buttons */}
+                                <div className="flex gap-4">
                                     <button
                                         type="submit"
-                                        className="flex-1 bg-rose-500 text-white py-2 rounded-lg hover:bg-rose-600 font-medium"
+                                        className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 rounded font-bold hover:shadow-lg transition"
                                     >
                                         Create Policy
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => setShowModal(false)}
-                                        className="flex-1 bg-gray-200 text-gray-800 py-2 rounded-lg hover:bg-gray-300 font-medium"
+                                        className="flex-1 bg-gray-200 text-gray-800 py-3 rounded font-bold hover:bg-gray-300"
                                     >
                                         Cancel
                                     </button>
@@ -502,8 +441,8 @@ export default function AutoScaling() {
                             </form>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     )
 }

@@ -1,15 +1,39 @@
-// Determine API base URL robustly for both Docker and local dev.
-// Prefer VITE_API_URL when provided; otherwise infer from the current hostname (port 8000).
+// Determine API base URL robustly for both Docker, local dev, and GitHub Codespaces.
+// In Codespaces, each port gets its own subdomain (e.g., ...-5173.app.github.dev, ...-8000.app.github.dev)
 const envBase = (import.meta as any).env?.VITE_API_URL as string | undefined;
-const isDev = typeof window !== 'undefined' && (window.location.port === '5173' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-// Use 127.0.0.1 instead of localhost to avoid Windows IPv6 resolution issues (::1 vs 127.0.0.1)
-let API_BASE = isDev ? 'http://127.0.0.1:8000' : undefined as unknown as string;
-if (!API_BASE) {
+
+function getApiBaseUrl(): string {
+  // If explicitly set via environment variable, use that
+  if (envBase) {
+    return envBase.replace(/\/$/, "");
+  }
+  
+  // Check if running in GitHub Codespaces
+  if (typeof window !== 'undefined' && window.location.hostname.includes('.app.github.dev')) {
+    // In Codespaces, replace the port in the subdomain (e.g., -5173 -> -8000)
+    const hostname = window.location.hostname;
+    const backendHostname = hostname.replace(/-\d+\.app\.github\.dev$/, '-8000.app.github.dev');
+    return `${window.location.protocol}//${backendHostname}`;
+  }
+  
+  // Local development
+  const isDev = typeof window !== 'undefined' && 
+    (window.location.port === '5173' || window.location.port === '5174' || 
+     window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  
+  if (isDev) {
+    return 'http://127.0.0.1:8000';
+  }
+  
+  // Fallback: infer from current location
   const inferred = (typeof window !== 'undefined')
     ? `${window.location.protocol}//${window.location.hostname}:8000`
     : 'http://127.0.0.1:8000';
-  API_BASE = (envBase && envBase.replace(/\/$/, "")) || inferred;
+  
+  return inferred;
 }
+
+const API_BASE = getApiBaseUrl();
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -387,3 +411,86 @@ export const dashboard = {
     }),
 };
 
+// Export API base URL for components that need it directly
+export { API_BASE };
+
+// Autoscaling interfaces
+export interface ScalingPolicy {
+  id: number;
+  container_id: number;
+  user_id: number;
+  enabled: boolean;
+  scale_up_cpu_threshold: number;
+  scale_up_memory_threshold: number;
+  scale_down_cpu_threshold: number;
+  scale_down_memory_threshold: number;
+  min_replicas: number;
+  max_replicas: number;
+  cooldown_period: number;
+  evaluation_period: number;
+  load_balancer_enabled: boolean;
+  load_balancer_port: number | null;
+  created_at: string;
+  updated_at: string | null;
+  last_scaled_at: string | null;
+}
+
+export interface ScalingEvent {
+  id: number;
+  policy_id: number;
+  container_id: number;
+  action: string;
+  trigger_metric: string;
+  metric_value: number;
+  replica_count_before: number;
+  replica_count_after: number;
+  created_at: string;
+}
+
+export interface CreatePolicyRequest {
+  container_id: number;
+  scale_up_cpu_threshold: number;
+  scale_up_memory_threshold: number;
+  scale_down_cpu_threshold: number;
+  scale_down_memory_threshold: number;
+  min_replicas: number;
+  max_replicas: number;
+  cooldown_period: number;
+  evaluation_period: number;
+  load_balancer_enabled?: boolean;
+  load_balancer_port?: number | null;
+}
+
+export const autoscaling = {
+  getPolicies: () =>
+    request<ScalingPolicy[]>('/autoscaling/policies', {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+  createPolicy: (data: CreatePolicyRequest) =>
+    request<ScalingPolicy>('/autoscaling/policies', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(data),
+    }),
+  togglePolicy: (policyId: number) =>
+    request<ScalingPolicy>(`/autoscaling/policies/${policyId}/toggle`, {
+      method: 'POST',
+      headers: authHeaders(),
+    }),
+  deletePolicy: (policyId: number) =>
+    request<void>(`/autoscaling/policies/${policyId}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    }),
+  getEvents: (limit: number = 50) =>
+    request<ScalingEvent[]>(`/autoscaling/events?limit=${limit}`, {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+  evaluateNow: () =>
+    request<{ status: string; message: string }>('/autoscaling/evaluate-now', {
+      method: 'POST',
+      headers: authHeaders(),
+    }),
+};

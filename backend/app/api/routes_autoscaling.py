@@ -175,7 +175,7 @@ def list_scaling_events(
 
 
 @router.post("/evaluate-now")
-def evaluate_policies_now(
+async def evaluate_policies_now(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -192,7 +192,7 @@ def evaluate_policies_now(
         autoscaler = AutoScalerService(db, docker_service)
         
         logger.info("Evaluating all policies...")
-        autoscaler.evaluate_all_policies()
+        await autoscaler.evaluate_all_policies()
         
         logger.info("✅ Evaluation complete")
         
