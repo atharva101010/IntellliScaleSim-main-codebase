@@ -8,7 +8,7 @@ export default function Header() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
         <div className="flex items-center gap-2 text-slate-800">
           <Link to="/" className="flex items-center gap-2">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-semibold">IS</span>
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-slate-700 to-slate-900 text-white font-semibold">IS</span>
             <span className="font-semibold tracking-tight">IntelliScaleSim</span>
           </Link>
         </div>

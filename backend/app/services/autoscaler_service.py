@@ -5,10 +5,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.models.scaling_policy import ScalingPolicy, ScalingEvent
-from app.models.container import Container
+from app.models.container import Container, ContainerStatus
 from app.services.docker_service import DockerService
 
 logger = logging.getLogger(__name__)
+
+HTTP_PORT_HINTS = {80, 81, 3000, 3001, 4000, 5000, 5173, 8000, 8080, 8081, 8888, 9000}
 
 
 class AutoScalerService:
@@ -26,15 +28,26 @@ class AutoScalerService:
         # Count running containers with this container as parent, plus the parent itself
         replicas = self.db.query(Container).filter(
             Container.parent_id == container_id,
-            Container.status == 'running'
+            Container.status == ContainerStatus.running
         ).count()
         
         # Include the parent container itself
         parent = self.db.query(Container).filter(Container.id == container_id).first()
-        if parent and parent.status == 'running':
+        if parent and parent.status == ContainerStatus.running:
             replicas += 1
             
         return replicas
+
+    def _find_available_replica_port(self, start_port: int) -> int:
+        """Find the next free host port for a replica container."""
+        used_ports = {
+            port
+            for (port,) in self.db.query(Container.port).filter(Container.port.isnot(None)).all()
+        }
+        candidate = start_port
+        while candidate in used_ports:
+            candidate += 1
+        return candidate
     
     async def get_container_metrics(self, container_id: int) -> Optional[dict]:
         """Get current CPU and memory metrics for a container"""
@@ -161,28 +174,54 @@ class AutoScalerService:
             if not parent:
                 logger.error(f"Parent container {policy.container_id} not found")
                 return False
+
+            if not parent.image:
+                logger.error(f"Parent container {policy.container_id} has no image configured")
+                return False
             
             # Create new replica container record
             replica_name = f"intelliscale-{parent.id}-{parent.name}-replica-{current_replicas}"
             
-            # Find available port by incrementing from parent's port
-            external_port = parent.port + current_replicas if parent.port else 5000 + current_replicas
-            
-            # Determine internal port - typically 80 for web apps or 5000 for Flask
-            # We'll default to 80 but this could be made configurable
-            internal_port = 80
-            
-            logger.info(f"Scaling up: Creating Docker container {replica_name} on external port {external_port}, internal port {internal_port}")
+            # Find available port by scanning from the parent's neighborhood.
+            external_port = self._find_available_replica_port((parent.port or 5000) + 1)
+
+            internal_port = self.docker_service.detect_internal_port(parent.image)
+            keepalive_command = None
+            run_port = external_port if internal_port else None
+
+            if internal_port is None and self.docker_service.should_use_keepalive_command(parent.image):
+                keepalive_command = ["sh", "-c", "while true; do sleep 3600; done"]
+                logger.info(
+                    f"Applying keepalive command for replica image '{parent.image}' to prevent immediate exit"
+                )
+
+            cpu_millicores = parent.cpu_limit or 500
+            cpu_limit_cores = max(cpu_millicores, 100) / 1000.0
+            mem_limit_mb = parent.memory_limit or 512
+
+            logger.info(
+                f"Scaling up: Creating Docker container {replica_name} on external port {run_port}, internal port {internal_port}"
+            )
             
             try:
                 docker_container_id = self.docker_service.run_container(
                     image=parent.image,
                     name=replica_name,
-                    port=external_port,
+                    port=run_port,
                     internal_port=internal_port,
-                    cpu_limit=parent.cpu_limit or "0.5",
-                    mem_limit=f"{parent.memory_limit or 512}m"
+                    cpu_limit=f"{cpu_limit_cores}",
+                    mem_limit=f"{int(mem_limit_mb)}m",
+                    command=keepalive_command,
                 )
+
+                runtime_status = self.docker_service.wait_for_container_running(docker_container_id, timeout_seconds=8)
+                if not runtime_status.get("running"):
+                    logger.error(f"Scaled replica container exited immediately: {replica_name}")
+                    try:
+                        self.docker_service.remove_container(docker_container_id, force=True)
+                    except Exception:
+                        pass
+                    return False
             except Exception as docker_err:
                 logger.error(f"Docker scale up failed: {docker_err}")
                 return False
@@ -190,11 +229,20 @@ class AutoScalerService:
             new_replica = Container(
                 name=f"{parent.name}-replica-{current_replicas}",
                 image=parent.image,
-                port=external_port,
+                port=run_port,
                 container_id=docker_container_id,
-                status='running',
+                status=ContainerStatus.running,
                 user_id=parent.user_id,
                 parent_id=parent.id,
+                deployment_type=parent.deployment_type,
+                cpu_limit=cpu_millicores,
+                memory_limit=mem_limit_mb,
+                environment_vars=parent.environment_vars,
+                localhost_url=(
+                    f"http://localhost:{run_port}"
+                    if run_port and internal_port in HTTP_PORT_HINTS
+                    else None
+                ),
                 started_at=datetime.now(timezone.utc)
             )
             
@@ -233,7 +281,7 @@ class AutoScalerService:
             # Find newest replica to remove
             replica = self.db.query(Container).filter(
                 Container.parent_id == policy.container_id,
-                Container.status == 'running'
+                Container.status == ContainerStatus.running
             ).order_by(Container.created_at.desc()).first()
             
             if not replica:
@@ -249,7 +297,7 @@ class AutoScalerService:
                 except Exception as docker_err:
                     logger.warning(f"Failed to remove Docker container during scale down: {docker_err}")
             
-            replica.status = 'stopped'
+            replica.status = ContainerStatus.stopped
             replica.stopped_at = datetime.now(timezone.utc)
             
             # Log scaling event

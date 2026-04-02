@@ -20,26 +20,26 @@ class LoadTestCreate(BaseModel):
     """Schema for creating a new load test"""
     container_id: int = Field(..., description="ID of the container to test")
     target_url: Optional[str] = Field(None, description="Optional custom URL to test (defaults to container URL)")
-    total_requests: int = Field(..., ge=1, le=1000, description="Total number of requests (1-1000)")
-    concurrency: int = Field(..., ge=1, le=50, description="Number of concurrent requests (1-50)")
-    duration_seconds: int = Field(..., ge=10, le=300, description="Test duration in seconds (10-300)")
+    total_requests: int = Field(..., ge=1, le=50000, description="Total number of requests (1-50000)")
+    concurrency: int = Field(..., ge=1, le=500, description="Number of concurrent requests (1-500)")
+    duration_seconds: int = Field(..., ge=10, le=1800, description="Test duration in seconds (10-1800)")
     
     @validator('total_requests')
     def validate_requests(cls, v):
-        if v > 1000:
-            raise ValueError("Maximum requests allowed: 1000")
+        if v > 50000:
+            raise ValueError("Maximum requests allowed: 50000")
         return v
     
     @validator('concurrency')
     def validate_concurrency(cls, v):
-        if v > 50:
-            raise ValueError("Concurrency cannot exceed: 50")
+        if v > 500:
+            raise ValueError("Concurrency cannot exceed: 500")
         return v
     
     @validator('duration_seconds')
     def validate_duration(cls, v):
-        if v > 300:
-            raise ValueError("Duration cannot exceed 5 minutes (300 seconds)")
+        if v > 1800:
+            raise ValueError("Duration cannot exceed 30 minutes (1800 seconds)")
         return v
 
 

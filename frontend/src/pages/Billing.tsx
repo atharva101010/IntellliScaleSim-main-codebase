@@ -79,12 +79,12 @@ const Billing: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6">
-            <div className="max-w-6xl mx-auto">
+        <div className="space-y-6">
+            <div className="max-w-6xl mx-auto w-full">
                 {/* Header */}
                 <div className="mb-8">
-                    <h1 className="text-4xl font-bold text-gray-900 mb-2">💰 Resource Quotas & Billing</h1>
-                    <p className="text-gray-600">Track costs and simulate billing for your deployments</p>
+                    <h1 className="text-3xl font-bold text-slate-900 mb-2">Resource Quotas & Billing</h1>
+                    <p className="text-slate-600">Track costs and simulate billing for your deployments</p>
                 </div>
 
                 {/* Tab Navigation */}
@@ -93,21 +93,21 @@ const Billing: React.FC = () => {
                         onClick={() => setActiveTab('realtime')}
                         className={`px-6 py-3 rounded-lg font-semibold transition ${
                             activeTab === 'realtime'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                                ? 'bg-slate-900 text-white'
+                                : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
                         }`}
                     >
-                        ⚡ Real-Time Billing
+                        Real-Time Billing
                     </button>
                     <button
                         onClick={() => setActiveTab('scenario')}
                         className={`px-6 py-3 rounded-lg font-semibold transition ${
                             activeTab === 'scenario'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                                ? 'bg-slate-900 text-white'
+                                : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
                         }`}
                     >
-                        🎯 Scenario-Based Billing
+                        Scenario-Based Billing
                     </button>
                 </div>
 
@@ -115,21 +115,21 @@ const Billing: React.FC = () => {
                 {activeTab === 'realtime' && (
                     <div className="space-y-6">
                         {/* Configuration Card */}
-                        <div className="bg-white rounded-lg shadow p-6">
-                            <h2 className="text-xl font-bold text-gray-900 mb-4">Configuration</h2>
+                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+                            <h2 className="text-xl font-bold text-slate-900 mb-4">Configuration</h2>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 {/* Container Selector */}
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Container</label>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Container</label>
                                     <select
                                         value={selectedContainer || ''}
                                         onChange={(e) => setSelectedContainer(Number(e.target.value))}
-                                        className="w-full border border-gray-300 rounded px-4 py-2 font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none transition"
                                     >
                                         <option value="">Select container...</option>
                                         {containers.map((c) => (
                                             <option key={c.id} value={c.id}>
-                                                🚀 {c.name}
+                                                Deploy {c.name}
                                             </option>
                                         ))}
                                     </select>
@@ -137,7 +137,7 @@ const Billing: React.FC = () => {
 
                                 {/* Provider Selector */}
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Provider</label>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Provider</label>
                                     <div className="flex gap-2">
                                         {(['aws', 'gcp', 'azure'] as Provider[]).map((p) => (
                                             <button
@@ -145,8 +145,8 @@ const Billing: React.FC = () => {
                                                 onClick={() => setProvider(p)}
                                                 className={`flex-1 py-2 rounded text-sm font-bold ${
                                                     provider === p
-                                                        ? 'bg-blue-600 text-white'
-                                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                        ? 'bg-slate-900 text-white'
+                                                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                                                 }`}
                                             >
                                                 {p.toUpperCase()}
@@ -157,11 +157,11 @@ const Billing: React.FC = () => {
 
                                 {/* Time Interval */}
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Time Interval</label>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Time Interval</label>
                                     <select
                                         value={timeInterval}
                                         onChange={(e) => setTimeInterval(Number(e.target.value))}
-                                        className="w-full border border-gray-300 rounded px-4 py-2 font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none transition"
                                     >
                                         <option value={1}>Last 1 Hour</option>
                                         <option value={6}>Last 6 Hours</option>
@@ -175,9 +175,9 @@ const Billing: React.FC = () => {
                             <button
                                 onClick={calculateRealTimeBilling}
                                 disabled={loadingBilling || !selectedContainer}
-                                className="mt-4 w-full bg-blue-600 text-white py-3 rounded font-bold hover:bg-blue-700 disabled:opacity-50 transition"
+                                className="mt-4 w-full bg-slate-900 text-white py-3 rounded-lg font-bold hover:bg-slate-700 disabled:opacity-50 transition"
                             >
-                                {loadingBilling ? '⏳ Calculating...' : '📊 Calculate Costs'}
+                                {loadingBilling ? 'Calculating...' : 'Calculate Costs'}
                             </button>
                         </div>
 
@@ -186,26 +186,26 @@ const Billing: React.FC = () => {
                             <>
                                 {/* Cost Cards */}
                                 <div className="grid grid-cols-4 gap-4">
-                                    <div className="bg-white rounded-lg shadow p-4 text-center">
-                                        <p className="text-sm text-gray-600 font-semibold">CPU Cost</p>
+                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 text-center">
+                                        <p className="text-sm text-slate-600 font-semibold">CPU Cost</p>
                                         <p className="text-2xl font-bold text-violet-600 mt-1">
                                             ${billingData.costs.cpu_cost.toFixed(4)}
                                         </p>
                                     </div>
-                                    <div className="bg-white rounded-lg shadow p-4 text-center">
-                                        <p className="text-sm text-gray-600 font-semibold">Memory Cost</p>
+                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 text-center">
+                                        <p className="text-sm text-slate-600 font-semibold">Memory Cost</p>
                                         <p className="text-2xl font-bold text-cyan-600 mt-1">
                                             ${billingData.costs.memory_cost.toFixed(4)}
                                         </p>
                                     </div>
-                                    <div className="bg-white rounded-lg shadow p-4 text-center">
-                                        <p className="text-sm text-gray-600 font-semibold">Storage Cost</p>
+                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 text-center">
+                                        <p className="text-sm text-slate-600 font-semibold">Storage Cost</p>
                                         <p className="text-2xl font-bold text-amber-600 mt-1">
                                             ${billingData.costs.storage_cost.toFixed(4)}
                                         </p>
                                     </div>
-                                    <div className="bg-white rounded-lg shadow p-4 text-center border-2 border-pink-600">
-                                        <p className="text-sm text-gray-600 font-semibold">Total Cost</p>
+                                    <div className="bg-white border-2 border-rose-500 rounded-xl shadow-sm p-4 text-center">
+                                        <p className="text-sm text-slate-600 font-semibold">Total Cost</p>
                                         <p className="text-2xl font-bold text-pink-600 mt-1">
                                             ${billingData.costs.total_cost.toFixed(4)}
                                         </p>
@@ -214,8 +214,8 @@ const Billing: React.FC = () => {
 
                                 {/* Usage Charts */}
                                 <div className="grid grid-cols-2 gap-6">
-                                    <div className="bg-white rounded-lg shadow p-6">
-                                        <h3 className="text-lg font-bold text-gray-900 mb-4">CPU Usage</h3>
+                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+                                        <h3 className="text-lg font-bold text-slate-900 mb-4">CPU Usage</h3>
                                         <ResponsiveContainer width="100%" height={250}>
                                             <LineChart data={billingData.usage_history}>
                                                 <CartesianGrid strokeDasharray="3 3" />
@@ -235,8 +235,8 @@ const Billing: React.FC = () => {
                                         </ResponsiveContainer>
                                     </div>
 
-                                    <div className="bg-white rounded-lg shadow p-6">
-                                        <h3 className="text-lg font-bold text-gray-900 mb-4">Memory Usage</h3>
+                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+                                        <h3 className="text-lg font-bold text-slate-900 mb-4">Memory Usage</h3>
                                         <ResponsiveContainer width="100%" height={250}>
                                             <LineChart data={billingData.usage_history}>
                                                 <CartesianGrid strokeDasharray="3 3" />
@@ -258,23 +258,23 @@ const Billing: React.FC = () => {
                                 </div>
 
                                 {/* Cost Breakdown */}
-                                <div className="bg-white rounded-lg shadow p-6">
-                                    <h3 className="text-xl font-bold text-gray-900 mb-4">Cost Breakdown</h3>
+                                <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+                                    <h3 className="text-xl font-bold text-slate-900 mb-4">Cost Breakdown</h3>
                                     <div className="space-y-3 text-sm">
-                                        <div className="flex justify-between py-2 border-b border-gray-200">
-                                            <span className="text-gray-700">CPU: {billingData.average_usage.cpu_cores.toFixed(3)} cores</span>
+                                        <div className="flex justify-between py-2 border-b border-slate-200">
+                                            <span className="text-slate-700">CPU: {billingData.average_usage.cpu_cores.toFixed(3)} cores</span>
                                             <span className="font-bold text-violet-600">${billingData.costs.cpu_cost.toFixed(4)}</span>
                                         </div>
-                                        <div className="flex justify-between py-2 border-b border-gray-200">
-                                            <span className="text-gray-700">Memory: {billingData.average_usage.memory_gb.toFixed(3)} GB</span>
+                                        <div className="flex justify-between py-2 border-b border-slate-200">
+                                            <span className="text-slate-700">Memory: {billingData.average_usage.memory_gb.toFixed(3)} GB</span>
                                             <span className="font-bold text-cyan-600">${billingData.costs.memory_cost.toFixed(4)}</span>
                                         </div>
-                                        <div className="flex justify-between py-2 border-b border-gray-200">
-                                            <span className="text-gray-700">Storage: {billingData.average_usage.storage_gb.toFixed(2)} GB</span>
+                                        <div className="flex justify-between py-2 border-b border-slate-200">
+                                            <span className="text-slate-700">Storage: {billingData.average_usage.storage_gb.toFixed(2)} GB</span>
                                             <span className="font-bold text-amber-600">${billingData.costs.storage_cost.toFixed(4)}</span>
                                         </div>
                                         <div className="flex justify-between py-2 text-lg font-bold">
-                                            <span className="text-gray-900">Total</span>
+                                            <span className="text-slate-900">Total</span>
                                             <span className="text-pink-600">${billingData.costs.total_cost.toFixed(4)}</span>
                                         </div>
                                     </div>
@@ -283,7 +283,7 @@ const Billing: React.FC = () => {
                         )}
 
                         {!billingData && !loadingBilling && (
-                            <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
+                            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-12 text-center text-slate-500">
                                 <p>Select a container and click "Calculate Costs" to view billing data</p>
                             </div>
                         )}
@@ -294,11 +294,11 @@ const Billing: React.FC = () => {
                 {activeTab === 'scenario' && (
                     <div className="space-y-6">
                         {/* Configuration Card */}
-                        <div className="bg-white rounded-lg shadow p-6">
-                            <h2 className="text-xl font-bold text-gray-900 mb-4">Scenario Configuration</h2>
+                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+                            <h2 className="text-xl font-bold text-slate-900 mb-4">Scenario Configuration</h2>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">CPU Cores</label>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">CPU Cores</label>
                                     <input
                                         type="number"
                                         min="0.5"
@@ -306,11 +306,11 @@ const Billing: React.FC = () => {
                                         step="0.5"
                                         value={cpuCores}
                                         onChange={(e) => setCpuCores(parseFloat(e.target.value))}
-                                        className="w-full border border-gray-300 rounded px-3 py-2"
+                                        className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none transition"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Memory (GB)</label>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Memory (GB)</label>
                                     <input
                                         type="number"
                                         min="1"
@@ -318,11 +318,11 @@ const Billing: React.FC = () => {
                                         step="1"
                                         value={memoryGb}
                                         onChange={(e) => setMemoryGb(parseInt(e.target.value))}
-                                        className="w-full border border-gray-300 rounded px-3 py-2"
+                                        className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none transition"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Storage (GB)</label>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Storage (GB)</label>
                                     <input
                                         type="number"
                                         min="10"
@@ -330,25 +330,25 @@ const Billing: React.FC = () => {
                                         step="10"
                                         value={storageGb}
                                         onChange={(e) => setStorageGb(parseInt(e.target.value))}
-                                        className="w-full border border-gray-300 rounded px-3 py-2"
+                                        className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none transition"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Duration (hours)</label>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Duration (hours)</label>
                                     <input
                                         type="number"
                                         min="1"
                                         max="720"
                                         value={durationHours}
                                         onChange={(e) => setDurationHours(parseInt(e.target.value))}
-                                        className="w-full border border-gray-300 rounded px-3 py-2"
+                                        className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none transition"
                                     />
                                 </div>
                             </div>
 
                             {/* Provider Selection */}
                             <div className="mt-4">
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">Provider</label>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">Provider</label>
                                 <div className="flex gap-2">
                                     {(['aws', 'gcp', 'azure'] as Provider[]).map((p) => (
                                         <button
@@ -356,8 +356,8 @@ const Billing: React.FC = () => {
                                             onClick={() => setScenarioProvider(p)}
                                             className={`flex-1 py-2 rounded text-sm font-bold ${
                                                 scenarioProvider === p
-                                                    ? 'bg-blue-600 text-white'
-                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                    ? 'bg-slate-900 text-white'
+                                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                                             }`}
                                         >
                                             {p.toUpperCase()}
@@ -370,9 +370,9 @@ const Billing: React.FC = () => {
                             <button
                                 onClick={runScenarioSimulation}
                                 disabled={loadingScenario}
-                                className="mt-4 w-full bg-blue-600 text-white py-3 rounded font-bold hover:bg-blue-700 disabled:opacity-50 transition"
+                                className="mt-4 w-full bg-slate-900 text-white py-3 rounded-lg font-bold hover:bg-slate-700 disabled:opacity-50 transition"
                             >
-                                {loadingScenario ? '⏳ Simulating...' : '🚀 Run Simulation'}
+                                {loadingScenario ? 'Simulating...' : 'Run Simulation'}
                             </button>
                         </div>
 
@@ -380,23 +380,23 @@ const Billing: React.FC = () => {
                         {scenarioResult && (
                             <>
                                 {/* Configuration Summary */}
-                                <div className="bg-white rounded-lg shadow p-6">
-                                    <h2 className="text-lg font-bold text-gray-900 mb-4">Configuration</h2>
+                                <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+                                    <h2 className="text-lg font-bold text-slate-900 mb-4">Configuration</h2>
                                     <div className="grid grid-cols-4 gap-4 text-center text-sm">
                                         <div>
-                                            <p className="text-gray-600 font-semibold">CPU</p>
+                                            <p className="text-slate-600 font-semibold">CPU</p>
                                             <p className="text-2xl font-bold text-violet-600">{scenarioResult.scenario.cpu_cores}</p>
                                         </div>
                                         <div>
-                                            <p className="text-gray-600 font-semibold">Memory</p>
+                                            <p className="text-slate-600 font-semibold">Memory</p>
                                             <p className="text-2xl font-bold text-cyan-600">{scenarioResult.scenario.memory_gb} GB</p>
                                         </div>
                                         <div>
-                                            <p className="text-gray-600 font-semibold">Storage</p>
+                                            <p className="text-slate-600 font-semibold">Storage</p>
                                             <p className="text-2xl font-bold text-amber-600">{scenarioResult.scenario.storage_gb} GB</p>
                                         </div>
                                         <div>
-                                            <p className="text-gray-600 font-semibold">Duration</p>
+                                            <p className="text-slate-600 font-semibold">Duration</p>
                                             <p className="text-2xl font-bold text-pink-600">{scenarioResult.scenario.duration_hours}h</p>
                                         </div>
                                     </div>
@@ -404,33 +404,33 @@ const Billing: React.FC = () => {
 
                                 {/* Cost Cards */}
                                 <div className="grid grid-cols-3 gap-4">
-                                    <div className="bg-white rounded-lg shadow p-4">
-                                        <p className="text-sm text-gray-600 font-semibold">CPU Cost</p>
+                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
+                                        <p className="text-sm text-slate-600 font-semibold">CPU Cost</p>
                                         <p className="text-2xl font-bold text-violet-600 mt-2">
                                             ${scenarioResult.cost_breakdown.cpu.cost.toFixed(4)}
                                         </p>
-                                        <p className="text-xs text-gray-500 mt-1">{scenarioResult.cost_breakdown.cpu.usage}</p>
+                                        <p className="text-xs text-slate-500 mt-1">{scenarioResult.cost_breakdown.cpu.usage}</p>
                                     </div>
-                                    <div className="bg-white rounded-lg shadow p-4">
-                                        <p className="text-sm text-gray-600 font-semibold">Memory Cost</p>
+                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
+                                        <p className="text-sm text-slate-600 font-semibold">Memory Cost</p>
                                         <p className="text-2xl font-bold text-cyan-600 mt-2">
                                             ${scenarioResult.cost_breakdown.memory.cost.toFixed(4)}
                                         </p>
-                                        <p className="text-xs text-gray-500 mt-1">{scenarioResult.cost_breakdown.memory.usage}</p>
+                                        <p className="text-xs text-slate-500 mt-1">{scenarioResult.cost_breakdown.memory.usage}</p>
                                     </div>
-                                    <div className="bg-white rounded-lg shadow p-4">
-                                        <p className="text-sm text-gray-600 font-semibold">Storage Cost</p>
+                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
+                                        <p className="text-sm text-slate-600 font-semibold">Storage Cost</p>
                                         <p className="text-2xl font-bold text-amber-600 mt-2">
                                             ${scenarioResult.cost_breakdown.storage.cost.toFixed(4)}
                                         </p>
-                                        <p className="text-xs text-gray-500 mt-1">{scenarioResult.cost_breakdown.storage.usage}</p>
+                                        <p className="text-xs text-slate-500 mt-1">{scenarioResult.cost_breakdown.storage.usage}</p>
                                     </div>
                                 </div>
 
                                 {/* Total */}
-                                <div className="bg-white rounded-lg shadow p-6 border-2 border-pink-600">
+                                <div className="bg-white rounded-xl shadow-sm p-6 border-2 border-rose-500">
                                     <div className="flex justify-between items-center">
-                                        <span className="text-lg font-bold text-gray-900">Total Estimated Cost</span>
+                                        <span className="text-lg font-bold text-slate-900">Total Estimated Cost</span>
                                         <span className="text-3xl font-bold text-pink-600">
                                             ${scenarioResult.costs.total_cost.toFixed(4)}
                                         </span>
@@ -440,7 +440,7 @@ const Billing: React.FC = () => {
                         )}
 
                         {!scenarioResult && !loadingScenario && (
-                            <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
+                            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-12 text-center text-slate-500">
                                 <p>Configure resources and click "Run Simulation" to see cost estimates</p>
                             </div>
                         )}
@@ -452,3 +452,5 @@ const Billing: React.FC = () => {
 };
 
 export default Billing;
+
+
