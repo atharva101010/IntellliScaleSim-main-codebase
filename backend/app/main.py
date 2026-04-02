@@ -1,22 +1,65 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import routes_auth, routes_containers, routes_loadtest, routes_dashboard, routes_monitoring, routes_autoscaling, routes_billing
+from app.api import (
+    routes_auth, 
+    routes_containers, 
+    routes_loadtest, 
+    routes_dashboard, 
+    routes_monitoring, 
+    routes_autoscaling, 
+    routes_billing,
+    routes_dockerhub,
+    routes_profile
+)
 from app.models.base import Base
 from app.database.session import engine
 from app.database.init_db import ensure_columns
 from app import models
 import logging
 import asyncio
+import time
+import os
 from starlette.middleware.base import BaseHTTPMiddleware
-from fastapi import Request
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-# Load Testing feature enabled
-app = FastAPI(title="IntelliScaleSim API", version="0.1.0")
+# Prometheus metrics
+REQUEST_COUNT = Counter(
+    'intelliscale_http_requests_total',
+    'Total HTTP requests',
+    ['method', 'endpoint', 'status']
+)
+REQUEST_LATENCY = Histogram(
+    'intelliscale_http_request_duration_seconds',
+    'HTTP request latency',
+    ['method', 'endpoint']
+)
+ACTIVE_REQUESTS = Gauge(
+    'intelliscale_http_requests_active',
+    'Number of active HTTP requests'
+)
+CONTAINER_COUNT = Gauge(
+    'intelliscale_containers_total',
+    'Total number of containers',
+    ['status']
+)
 
-# Configure CORS - allow all origins for development
-# In production, restrict this to your specific domains
+# FastAPI app with metadata
+app = FastAPI(
+    title="IntelliScaleSim API",
+    description="Cloud container simulation platform with AI-powered cost estimation",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
+
+# Configure CORS - comprehensive for development and production
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -26,34 +69,105 @@ origins = [
     "http://127.0.0.1:5175",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:3500",  # Grafana
+    "http://127.0.0.1:3500",
+    "http://frontend:80",
+    "http://frontend:5173",
 ]
+
+# Add CORS origins from environment
+extra_origins = os.getenv("CORS_ORIGINS", "")
+if extra_origins:
+    origins.extend([o.strip() for o in extra_origins.split(",") if o.strip()])
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for GitHub Codespaces
+    allow_origins=origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https?://.*\.app\.github\.dev$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+
+
+# Metrics middleware
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    """Track request metrics for Prometheus"""
+    ACTIVE_REQUESTS.inc()
+    start_time = time.time()
+    
+    try:
+        response = await call_next(request)
+        
+        # Record metrics
+        duration = time.time() - start_time
+        endpoint = request.url.path
+        REQUEST_COUNT.labels(
+            method=request.method,
+            endpoint=endpoint,
+            status=response.status_code
+        ).inc()
+        REQUEST_LATENCY.labels(
+            method=request.method,
+            endpoint=endpoint
+        ).observe(duration)
+        
+        return response
+    finally:
+        ACTIVE_REQUESTS.dec()
 
 
 @app.get("/")
 def root():
-    return {"name": "IntelliScaleSim API", "status": "ok"}
+    """Root endpoint - API health check"""
+    return {
+        "name": "IntelliScaleSim API",
+        "version": "1.0.0",
+        "status": "ok",
+        "features": [
+            "container_deployment",
+            "docker_hub_integration",
+            "prometheus_monitoring",
+            "autoscaling",
+            "billing_simulation"
+        ]
+    }
 
 
 @app.get("/healthz")
 def healthz():
-    return {"status": "healthy"}
+    """Health check endpoint for container orchestration"""
+    return {
+        "status": "healthy",
+        "timestamp": time.time(),
+        "services": {
+            "api": "ok",
+            "database": "ok"
+        }
+    }
 
-# Include routers
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint"""
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST
+    )
+
+
+# Include all routers
 app.include_router(routes_auth.router)
 app.include_router(routes_containers.router)
 app.include_router(routes_loadtest.router)
 app.include_router(routes_dashboard.router)
 app.include_router(routes_monitoring.router)
-app.include_router(routes_autoscaling.router)  # Auto-scaling API
-app.include_router(routes_billing.router)  # Billing & Resource Quotas API
+app.include_router(routes_autoscaling.router)
+app.include_router(routes_billing.router)
+app.include_router(routes_dockerhub.router)  # Docker Hub API
+app.include_router(routes_profile.router)    # User Profile API
 
 logger = logging.getLogger(__name__)
 

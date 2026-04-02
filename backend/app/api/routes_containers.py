@@ -19,14 +19,52 @@ from app.services.docker_service import get_docker_service
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/containers", tags=["containers"])
 
+HTTP_PORT_HINTS = {80, 81, 3000, 3001, 4000, 5000, 5173, 8000, 8080, 8081, 8888, 9000}
+
 
 def find_available_port(db: Session, start_port: int = 3000) -> int:
     """Find an available port starting from start_port"""
-    used_ports = {c.port for c in db.query(Container.port).filter(Container.port.isnot(None)).all()}
+    used_ports = {
+        port
+        for (port,) in db.query(Container.port).filter(Container.port.isnot(None)).all()
+    }
     port = start_port
     while port in used_ports:
         port += 1
     return port
+
+
+def _sync_container_runtime_state(container: Container, docker_service) -> bool:
+    """Sync DB status from Docker runtime state for real containers."""
+    if container.deployment_type == "simulated" or not container.container_id:
+        return False
+
+    if container.status not in {ContainerStatus.running, ContainerStatus.pending}:
+        return False
+
+    try:
+        runtime = docker_service.get_container_status(container.container_id)
+    except Exception as runtime_err:
+        logger.warning(f"Runtime state sync failed for container {container.id}: {runtime_err}")
+        return False
+
+    if runtime.get("running"):
+        if container.status != ContainerStatus.running:
+            container.status = ContainerStatus.running
+            container.stopped_at = None
+            return True
+        return False
+
+    runtime_status = str(runtime.get("status", "")).lower()
+    if runtime_status in {"created", "restarting"}:
+        return False
+
+    mapped_status = ContainerStatus.stopped if runtime_status == "exited" else ContainerStatus.error
+    if container.status != mapped_status:
+        container.status = mapped_status
+        container.stopped_at = datetime.now(timezone.utc)
+        return True
+    return False
 
 
 
@@ -70,7 +108,7 @@ def deploy_container(
             detail=f"Container with name '{payload.name}' already exists",
         )
     
-    # Assign port if not provided
+    # Reserve an external port when one is needed for host mapping.
     assigned_port = payload.port if payload.port else find_available_port(db)
     
     # Initialize container record
@@ -146,22 +184,73 @@ def deploy_container(
                 db.add(container)
                 db.commit()
                 db.refresh(container)
+
+            internal_port = docker_service.detect_internal_port(image_name)
+            if not internal_port and payload.port:
+                internal_port = payload.port
+                logger.info(
+                    f"No EXPOSE found for {image_name}; using user-provided port {internal_port} as internal port"
+                )
+
+            run_port = assigned_port if internal_port else None
+            keepalive_command = None
+
+            if internal_port is None and docker_service.should_use_keepalive_command(image_name):
+                keepalive_command = ["sh", "-c", "while true; do sleep 3600; done"]
+                logger.info(
+                    f"Applying keepalive command for base image '{image_name}' to prevent immediate exit"
+                )
             
             # Run container
             logger.info(f"Running container: {container.name}")
+            if run_port and internal_port:
+                logger.info(f"Port mapping: {run_port} (external) -> {internal_port} (internal)")
+            else:
+                logger.info(
+                    f"No exposed service port detected for {image_name}; container will run without host port mapping"
+                )
+
             docker_container_id = docker_service.run_container(
                 image=image_name,
                 name=f"intelliscale-{container.id}-{container.name}",
-                port=assigned_port,
-                internal_port=payload.port or 80,  # Default to 80 if not specified
+                port=run_port,
+                internal_port=internal_port,
                 cpu_limit=str(payload.cpu_limit / 1000),  # Convert millicores to cores
-                mem_limit=f"{payload.memory_limit}m"
+                mem_limit=f"{payload.memory_limit}m",
+                env_vars=payload.environment_vars or {},
+                command=keepalive_command,
             )
+
+            runtime_status = docker_service.wait_for_container_running(docker_container_id, timeout_seconds=8)
+            if not runtime_status.get("running"):
+                runtime_logs = ""
+                try:
+                    runtime_logs = docker_service.get_container_logs(docker_container_id, tail=40)
+                except Exception:
+                    runtime_logs = ""
+
+                container.status = ContainerStatus.error
+                container.build_status = "failed"
+                db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Container exited immediately after startup. "
+                        "For base images (for example amazonlinux/ubuntu/alpine), use a long-running command "
+                        "or configure a service port. "
+                        f"Last logs: {runtime_logs[:400] if runtime_logs else 'Unavailable'}"
+                    ),
+                )
             
             container.container_id = docker_container_id
             container.status = ContainerStatus.running
             container.started_at = datetime.now(timezone.utc)
-            container.localhost_url = f"http://localhost:{assigned_port}"
+            container.port = run_port
+            container.localhost_url = (
+                f"http://localhost:{run_port}"
+                if run_port and internal_port in HTTP_PORT_HINTS
+                else None
+            )
             
             logger.info(f"Container deployed successfully: {container.name} at {container.localhost_url}")
             
@@ -240,8 +329,8 @@ def deploy_container(
                 # Detect internal port from Dockerfile EXPOSE directive
                 internal_port = git_service.parse_dockerfile_expose(dockerfile_path)
                 if not internal_port:
-                    # Fallback to user-specified port or default 80
-                    internal_port = payload.port or 80
+                    # Fallback to common web app default when EXPOSE is missing
+                    internal_port = 80
                     logger.info(f"Using fallback internal port: {internal_port}")
                 
                 logger.info(f"Running container: {container.name}")
@@ -253,13 +342,30 @@ def deploy_container(
                     port=assigned_port,
                     internal_port=internal_port,
                     cpu_limit=str(payload.cpu_limit / 1000),
-                    mem_limit=f"{payload.memory_limit}m"
+                    mem_limit=f"{payload.memory_limit}m",
+                    env_vars=payload.environment_vars or {},
                 )
+
+                runtime_status = docker_service.wait_for_container_running(docker_container_id, timeout_seconds=8)
+                if not runtime_status.get("running"):
+                    runtime_logs = ""
+                    try:
+                        runtime_logs = docker_service.get_container_logs(docker_container_id, tail=40)
+                    except Exception:
+                        runtime_logs = ""
+                    raise RuntimeError(
+                        "Built container exited immediately after startup. "
+                        f"Last logs: {runtime_logs[:400] if runtime_logs else 'Unavailable'}"
+                    )
                 
                 container.container_id = docker_container_id
                 container.status = ContainerStatus.running
                 container.started_at = datetime.now(timezone.utc)
-                container.localhost_url = f"http://localhost:{assigned_port}"
+                container.localhost_url = (
+                    f"http://localhost:{assigned_port}"
+                    if internal_port in HTTP_PORT_HINTS
+                    else None
+                )
                 
                 logger.info(f"GitHub deployment successful: {container.name} at {container.localhost_url}")
                 
@@ -338,6 +444,15 @@ def list_containers(
     query = query.order_by(Container.created_at.desc())
     
     containers = query.all()
+
+    docker_service = get_docker_service()
+    state_changed = False
+    for container in containers:
+        if _sync_container_runtime_state(container, docker_service):
+            state_changed = True
+
+    if state_changed:
+        db.commit()
     
     return ContainerListOut(containers=containers, total=len(containers))
 
@@ -364,6 +479,11 @@ def get_container(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this container",
         )
+
+    docker_service = get_docker_service()
+    if _sync_container_runtime_state(container, docker_service):
+        db.commit()
+        db.refresh(container)
     
     return container
 
@@ -397,6 +517,42 @@ def start_container(
             message="Container is already running",
             container=container,
         )
+
+    if container.deployment_type != "simulated":
+        if not container.container_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Container has no Docker container ID",
+            )
+
+        try:
+            docker_service = get_docker_service()
+            docker_service.start_container(container.container_id)
+            runtime_status = docker_service.wait_for_container_running(container.container_id, timeout_seconds=8)
+            if not runtime_status.get("running"):
+                runtime_logs = ""
+                try:
+                    runtime_logs = docker_service.get_container_logs(container.container_id, tail=40)
+                except Exception:
+                    runtime_logs = ""
+
+                container.status = ContainerStatus.error
+                db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Container exited immediately after start. "
+                        f"Last logs: {runtime_logs[:400] if runtime_logs else 'Unavailable'}"
+                    ),
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to start Docker container {container.container_id}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Failed to start Docker container: {str(e)}",
+            )
     
     # Update container status
     container.status = ContainerStatus.running
@@ -442,6 +598,23 @@ def stop_container(
             message="Container is already stopped",
             container=container,
         )
+
+    if container.deployment_type != "simulated":
+        if not container.container_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Container has no Docker container ID",
+            )
+
+        try:
+            docker_service = get_docker_service()
+            docker_service.stop_container(container.container_id)
+        except Exception as e:
+            logger.error(f"Failed to stop Docker container {container.container_id}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Failed to stop Docker container: {str(e)}",
+            )
     
     # Update container status
     container.status = ContainerStatus.stopped
@@ -479,21 +652,54 @@ def delete_container(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to delete this container",
         )
+
+    # Include autoscaled replicas so deleting a parent container is complete.
+    replicas = db.query(Container).filter(Container.parent_id == container_id).all()
+    all_container_ids = [container_id] + [r.id for r in replicas]
+
+    # Best-effort cleanup of Docker containers before deleting DB records.
+    docker_service = get_docker_service()
+    for target in [container, *replicas]:
+        if target.deployment_type != "simulated" and target.container_id:
+            try:
+                docker_service.remove_container(target.container_id, force=True)
+            except Exception as e:
+                logger.warning(f"Failed to remove Docker container {target.container_id}: {e}")
+
+    # Sweep for any orphaned replicas that match IntelliScale naming convention.
+    try:
+        prefix = f"intelliscale-{container_id}-"
+        removed_orphans = docker_service.remove_containers_by_name_prefix(prefix, force=True)
+        if removed_orphans:
+            logger.info(f"Removed {removed_orphans} orphan runtime containers for prefix {prefix}")
+    except Exception as e:
+        logger.warning(f"Failed orphan cleanup sweep for container {container_id}: {e}")
     
     # Manually delete dependent records to avoid foreign key constraints
     from app.models.billing_models import ResourceUsage, ResourceQuota, BillingSnapshot
-    from app.models.loadtest import LoadTest
+    from app.models.loadtest import LoadTest, LoadTestMetric
     from app.models.scaling_policy import ScalingPolicy, ScalingEvent
 
-    db.query(ResourceUsage).filter(ResourceUsage.container_id == container_id).delete()
-    db.query(ResourceQuota).filter(ResourceQuota.container_id == container_id).delete()
-    db.query(BillingSnapshot).filter(BillingSnapshot.container_id == container_id).delete()
-    db.query(LoadTest).filter(LoadTest.container_id == container_id).delete()
-    db.query(ScalingEvent).filter(ScalingEvent.container_id == container_id).delete()
-    db.query(ScalingPolicy).filter(ScalingPolicy.container_id == container_id).delete()
+    db.query(ResourceUsage).filter(ResourceUsage.container_id.in_(all_container_ids)).delete(synchronize_session=False)
+    db.query(ResourceQuota).filter(ResourceQuota.container_id.in_(all_container_ids)).delete(synchronize_session=False)
+    db.query(BillingSnapshot).filter(BillingSnapshot.container_id.in_(all_container_ids)).delete(synchronize_session=False)
+
+    load_test_ids = [
+        test_id
+        for (test_id,) in db.query(LoadTest.id)
+        .filter(LoadTest.container_id.in_(all_container_ids))
+        .all()
+    ]
+    if load_test_ids:
+        db.query(LoadTestMetric).filter(LoadTestMetric.load_test_id.in_(load_test_ids)).delete(synchronize_session=False)
+
+    db.query(LoadTest).filter(LoadTest.container_id.in_(all_container_ids)).delete(synchronize_session=False)
+    db.query(ScalingEvent).filter(ScalingEvent.container_id.in_(all_container_ids)).delete(synchronize_session=False)
+    db.query(ScalingPolicy).filter(ScalingPolicy.container_id.in_(all_container_ids)).delete(synchronize_session=False)
 
     container_name = container.name
-    db.delete(container)
+    db.query(Container).filter(Container.parent_id == container_id).delete(synchronize_session=False)
+    db.query(Container).filter(Container.id == container_id).delete(synchronize_session=False)
     db.commit()
     
     return ContainerActionResponse(
@@ -526,6 +732,20 @@ def get_container_logs(
             detail="Not authorized to view logs for this container",
         )
     
+    # For real Docker-backed containers, return actual container logs when available.
+    if container.deployment_type != "simulated" and container.container_id:
+        try:
+            docker_service = get_docker_service()
+            logs_text = docker_service.get_container_logs(container.container_id, tail=200)
+            logs = [line for line in logs_text.splitlines() if line.strip()]
+            return {
+                "logs": logs,
+                "container_name": container.name,
+                "status": container.status.value,
+            }
+        except Exception as e:
+            logger.warning(f"Failed to fetch Docker logs for container {container.id}: {e}")
+
     # Generate simulated logs based on container state
     logs = []
     if container.status == ContainerStatus.running:

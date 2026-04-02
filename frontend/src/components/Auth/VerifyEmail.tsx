@@ -4,7 +4,7 @@ import { api } from '../../utils/api'
 
 export default function VerifyEmail() {
   const [status, setStatus] = useState<'pending' | 'ok' | 'error' | 'awaiting'>('pending')
-  const [message, setMessage] = useState('Verifying…')
+  const [message, setMessage] = useState('Verifying...')
   const [email, setEmail] = useState('')
   const [resending, setResending] = useState(false)
   const [resent, setResent] = useState(false)
@@ -67,15 +67,15 @@ export default function VerifyEmail() {
           <p className="text-sm text-slate-700">{message}</p>
           <div className="flex items-center gap-2">
             <input
-              className="flex-1 rounded-full bg-slate-50 border border-slate-200 shadow-sm focus:border-rose-500 focus:ring-rose-500 px-4 py-2.5"
+              className="flex-1 rounded-full bg-slate-50 border border-slate-200 shadow-sm focus:border-slate-900 focus:ring-slate-500 px-4 py-2.5"
               type="email"
               placeholder="you@example.com"
               value={email}
               onChange={e => setEmail(e.target.value)}
             />
             <button type="button" onClick={resend} disabled={resending || !email}
-              className="rounded-full bg-rose-500 text-white px-4 py-2 font-semibold shadow-sm hover:bg-rose-600 disabled:opacity-60">
-              {resending ? 'Sending…' : 'Resend'}
+              className="rounded-full bg-slate-900 text-white px-4 py-2 font-semibold shadow-sm hover:bg-slate-700 disabled:opacity-60">
+              {resending ? 'Sending...' : 'Resend'}
             </button>
           </div>
           {resent && <p className="text-sm text-emerald-700">Verification email sent.</p>}

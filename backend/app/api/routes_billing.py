@@ -148,7 +148,9 @@ async def calculate_real_time_billing(
             },
             "billing": billing_data,
         }
-    
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error calculating real-time billing: {e}")
         raise HTTPException(status_code=500, detail=f"Billing calculation failed: {str(e)}")

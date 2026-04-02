@@ -39,7 +39,7 @@ export default function ForgotPassword() {
           <div>
             <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Email</label>
             <input
-              className="mt-1 w-full rounded-full bg-slate-50 border border-slate-200 shadow-sm focus:border-rose-500 focus:ring-rose-500 px-4 py-2.5"
+              className="mt-1 w-full rounded-full bg-slate-50 border border-slate-200 shadow-sm focus:border-slate-900 focus:ring-slate-500 px-4 py-2.5"
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
@@ -48,8 +48,8 @@ export default function ForgotPassword() {
             />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <button disabled={loading} className="w-full rounded-full bg-rose-500 text-white px-6 py-2.5 font-semibold shadow-sm hover:bg-rose-600">
-            {loading ? 'Sending…' : 'Send reset link'}
+          <button disabled={loading} className="w-full rounded-full bg-slate-900 text-white px-6 py-2.5 font-semibold shadow-sm hover:bg-slate-700 disabled:opacity-60">
+            {loading ? 'Sending...' : 'Send reset link'}
           </button>
         </form>
       )}

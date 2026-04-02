@@ -1,5 +1,5 @@
 import { Container } from '../../utils/api'
-import { format, formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow } from 'date-fns'
 
 interface ContainerCardProps {
     container: Container
@@ -10,10 +10,10 @@ interface ContainerCardProps {
 }
 
 const statusColors = {
-    running: 'bg-emerald-100 text-emerald-800',
+    running: 'bg-slate-100 text-slate-900',
     stopped: 'bg-slate-100 text-slate-700',
-    pending: 'bg-amber-100 text-amber-800',
-    error: 'bg-red-100 text-red-800',
+    pending: 'bg-slate-200 text-slate-800',
+    error: 'bg-slate-300 text-white',
 }
 
 export default function ContainerCard({
@@ -57,7 +57,7 @@ export default function ContainerCard({
                             href={container.localhost_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="font-semibold text-rose-600 hover:text-rose-700 hover:underline"
+                            className="font-semibold text-slate-800 hover:text-slate-900 hover:underline"
                         >
                             {container.localhost_url}
                         </a>
@@ -80,14 +80,14 @@ export default function ContainerCard({
                 {container.status === 'running' ? (
                     <button
                         onClick={() => onStop(container.id)}
-                        className="px-3 py-2 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 transition"
+                        className="px-3 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition"
                     >
                         Stop
                     </button>
                 ) : container.status === 'stopped' ? (
                     <button
                         onClick={() => onStart(container.id)}
-                        className="px-3 py-2 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 transition"
+                        className="px-3 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition"
                     >
                         Start
                     </button>
@@ -95,7 +95,7 @@ export default function ContainerCard({
 
                 <button
                     onClick={() => onDelete(container.id)}
-                    className="px-3 py-2 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition"
+                    className="px-3 py-2 border border-slate-300 bg-white text-slate-900 text-sm font-medium rounded-lg hover:bg-slate-100 transition"
                     title="Delete container"
                 >
                     Delete

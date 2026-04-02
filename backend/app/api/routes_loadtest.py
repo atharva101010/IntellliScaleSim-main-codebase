@@ -1,16 +1,16 @@
 """
 API routes for Load Testing feature
 """
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database.session import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, decode_token
 from app.models.user import User
 from app.models.container import Container
 from app.models.loadtest import LoadTest, LoadTestMetric, LoadTestStatus
@@ -39,7 +39,6 @@ def get_load_test_service(db: Session = Depends(get_db)) -> LoadTestService:
 @router.post("/start", response_model=LoadTestStartResponse, status_code=status.HTTP_201_CREATED)
 async def start_load_test(
     request: LoadTestCreate,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     service: LoadTestService = Depends(get_load_test_service)
@@ -99,8 +98,9 @@ async def start_load_test(
         db.commit()
         db.refresh(load_test)
         
-        # 5. Start test in background
-        background_tasks.add_task(service.execute_load_test, load_test.id)
+        # 5. Start test in background and register for cancellation across requests
+        task = asyncio.create_task(service.execute_load_test(load_test.id))
+        service.register_test_task(load_test.id, task)
         
         return LoadTestStartResponse(
             id=load_test.id,
@@ -153,16 +153,34 @@ def get_load_test(
 @router.get("/{test_id}/metrics/stream")
 async def stream_load_test_metrics(
     test_id: int,
+    request: Request,
+    token: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
 ):
     """
     Stream real-time metrics using Server-Sent Events (SSE)
     """
-    # Verify test exists and belongs to user
+    # Resolve user from either Authorization header (preferred) or token query (EventSource fallback)
+    resolved_user_id: Optional[int] = None
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        bearer_token = auth_header.split(" ", 1)[1]
+        payload = decode_token(bearer_token)
+        resolved_user_id = int(payload.get("sub")) if payload.get("sub") else None
+    elif token:
+        payload = decode_token(token)
+        resolved_user_id = int(payload.get("sub")) if payload.get("sub") else None
+
+    if not resolved_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    # Verify test exists and belongs to authenticated user
     test = db.query(LoadTest).filter(
         LoadTest.id == test_id,
-        LoadTest.user_id == current_user.id
+        LoadTest.user_id == resolved_user_id
     ).first()
     
     if not test:
@@ -278,6 +296,14 @@ async def cancel_load_test(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot cancel test in {test.status.value} status"
         )
+
+    task = service.get_test_task(test_id)
+    if not task:
+        # Fallback for orphaned/background task state after restarts.
+        test.status = LoadTestStatus.CANCELLED
+        test.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        return LoadTestCancelResponse(message="Load test cancelled")
     
     # Cancel the test
     await service.cancel_load_test(test_id)
