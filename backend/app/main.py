@@ -15,16 +15,22 @@ logger = logging.getLogger(__name__)
 # Load Testing feature enabled
 app = FastAPI(title="IntelliScaleSim API", version="0.1.0")
 
-# Configure CORS
+# Configure CORS - allow all origins for development
+# In production, restrict this to your specific domains
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://localhost:5175",
+    "http://127.0.0.1:5175",
     "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Allow all origins for GitHub Codespaces
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

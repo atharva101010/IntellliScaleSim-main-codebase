@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models.loadtest import LoadTest, LoadTestMetric, LoadTestStatus
 from app.models.container import Container
 from app.services.docker_service import DockerService
+from app.database.session import SessionLocal
 import statistics
 
 
@@ -29,41 +30,47 @@ class LoadTestService:
         Args:
             test_id: ID of the load test to execute
         """
-        # Get test from database
-        test = self.db.query(LoadTest).filter(LoadTest.id == test_id).first()
-        if not test:
-            raise ValueError(f"Load test {test_id} not found")
-        
+        # Create a new database session for the background task
+        # This is necessary because the original session may be closed
+        db = SessionLocal()
         try:
-            # Update status to running
-            test.status = LoadTestStatus.RUNNING
-            test.started_at = datetime.now(timezone.utc)
-            self.db.commit()
-            
-            # Execute test
-            await self._run_test(test)
-            
-            # Mark as completed
-            test.status = LoadTestStatus.COMPLETED
-            test.completed_at = datetime.now(timezone.utc)
-            self.db.commit()
-            
-        except asyncio.CancelledError:
-            # Test was cancelled
-            test.status = LoadTestStatus.CANCELLED
-            test.completed_at = datetime.now(timezone.utc)
-            self.db.commit()
-            raise
-            
-        except Exception as e:
-            # Test failed
-            test.status = LoadTestStatus.FAILED
-            test.error_message = str(e)
-            test.completed_at = datetime.now(timezone.utc)
-            self.db.commit()
-            raise
+            # Get test from database
+            test = db.query(LoadTest).filter(LoadTest.id == test_id).first()
+            if not test:
+                raise ValueError(f"Load test {test_id} not found")
+        
+            try:
+                # Update status to running
+                test.status = LoadTestStatus.RUNNING
+                test.started_at = datetime.now(timezone.utc)
+                db.commit()
+                
+                # Execute test with local db session
+                await self._run_test(test, db)
+                
+                # Mark as completed
+                test.status = LoadTestStatus.COMPLETED
+                test.completed_at = datetime.now(timezone.utc)
+                db.commit()
+                
+            except asyncio.CancelledError:
+                # Test was cancelled
+                test.status = LoadTestStatus.CANCELLED
+                test.completed_at = datetime.now(timezone.utc)
+                db.commit()
+                raise
+                
+            except Exception as e:
+                # Test failed
+                test.status = LoadTestStatus.FAILED
+                test.error_message = str(e)
+                test.completed_at = datetime.now(timezone.utc)
+                db.commit()
+                raise
+        finally:
+            db.close()
     
-    async def _run_test(self, test: LoadTest):
+    async def _run_test(self, test: LoadTest, db: Session):
         """
         Execute load test with strict duration enforcement.
         
@@ -85,7 +92,7 @@ class LoadTestService:
         
         # Start metrics collection task
         metrics_task = asyncio.create_task(
-            self._collect_metrics(test, results, start_time)
+            self._collect_metrics(test, results, start_time, db)
         )
         
         # Calculate request rate: requests per second
@@ -155,15 +162,15 @@ class LoadTestService:
                 pass
         
         # Calculate final statistics
-        await self._save_final_stats(test, results)
+        await self._save_final_stats(test, results, db)
     
     
-    async def _collect_metrics(self, test: LoadTest, results: Dict, start_time: float):
+    async def _collect_metrics(self, test: LoadTest, results: Dict, start_time: float, db: Session):
         """Collect container metrics during test execution"""
         try:
             while True:
                 # Get container stats
-                container = self.db.query(Container).filter(
+                container = db.query(Container).filter(
                     Container.id == test.container_id
                 ).first()
                 
@@ -172,15 +179,19 @@ class LoadTestService:
                     import random
                     cpu_percent = random.uniform(3, 15)
                     memory_mb = random.uniform(100, 300)
-                else:
-                    # Get real Docker stats
+                elif container and container.container_id:
+                    # Get real Docker stats using the Docker container ID
                     try:
-                        stats = await self.docker_service.get_container_stats_async(test.container_id)
+                        stats = await self.docker_service.get_container_stats_async(container.container_id)
                         cpu_percent = stats.get("cpu_percent", 0)
                         memory_mb = stats.get("memory_usage_mb", 0)
                     except:
                         cpu_percent = 0
                         memory_mb = 0
+                else:
+                    # No Docker container ID available
+                    cpu_percent = 0
+                    memory_mb = 0
                 
                 # Save metric snapshot
                 metric = LoadTestMetric(
@@ -192,13 +203,13 @@ class LoadTestService:
                     requests_failed=results["failed"],
                     active_requests=results["active"]
                 )
-                self.db.add(metric)
-                self.db.commit()
+                db.add(metric)
+                db.commit()
                 
                 # Update test with current progress
                 test.requests_completed = results["completed"]
                 test.requests_failed = results["failed"]
-                self.db.commit()
+                db.commit()
                 
                 # Wait before next collection
                 await asyncio.sleep(2)
@@ -206,7 +217,7 @@ class LoadTestService:
         except asyncio.CancelledError:
             raise
     
-    async def _save_final_stats(self, test: LoadTest, results: Dict):
+    async def _save_final_stats(self, test: LoadTest, results: Dict, db: Session):
         """Calculate and save final test statistics"""
         test.requests_completed = results["completed"]
         test.requests_failed = results["failed"]
@@ -218,7 +229,7 @@ class LoadTestService:
             test.max_response_time_ms = max(results["response_times"])
         
         # Get peak resource usage from metrics
-        metrics = self.db.query(LoadTestMetric).filter(
+        metrics = db.query(LoadTestMetric).filter(
             LoadTestMetric.load_test_id == test.id
         ).all()
         
@@ -226,7 +237,7 @@ class LoadTestService:
             test.peak_cpu_percent = max(m.cpu_percent for m in metrics)
             test.peak_memory_mb = max(m.memory_mb for m in metrics)
         
-        self.db.commit()
+        db.commit()
     
     def start_load_test(self, test_id: int):
         """Start a load test in the background"""
