@@ -9,7 +9,7 @@ from app.models.billing_models import (
     PricingModel, PricingProvider
 )
 from app.models.container import Container
-from app.services.docker_service import DockerService
+from app.services.docker_service import DockerService, get_docker_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class BillingService:
 
     def __init__(self, db: Session, docker_service: Optional[DockerService] = None):
         self.db = db
-        self.docker_service = docker_service or DockerService()
+        self.docker_service = docker_service or get_docker_service()
 
     def initialize_pricing_models(self):
         """Initialize default pricing models in database if not exist"""
@@ -77,9 +77,8 @@ class BillingService:
 
     async def collect_container_metrics(self, container: Container) -> Optional[Dict]:
         """Collect current resource metrics from a running container"""
-        # Status check (enum comparison or string comparison)
-        status = str(container.status).lower()
-        if not container.container_id or "running" not in status:
+        status = container.status.value if hasattr(container.status, "value") else str(container.status)
+        if not container.container_id or status != "running":
             logger.debug(f"Container {container.id} is not in running state for metrics. Status: {status}")
             return None
 
@@ -93,7 +92,7 @@ class BillingService:
             cpu_cores_used = cpu_percent / 100.0  # Approximate cores used
 
             # Get memory usage
-            memory_mb = stats.get("memory_mb", 0.0)
+            memory_mb = stats.get("memory_usage_mb", 0.0)
             memory_gb = memory_mb / 1024.0
 
             # Network stats
@@ -101,7 +100,7 @@ class BillingService:
             network_tx = stats.get("network_tx_bytes", 0)
 
             # Storage (simplified - use container limit as allocated storage)
-            storage_gb = container.memory_limit / 1024.0  # Placeholder estimate
+            storage_gb = (container.memory_limit or 0) / 1024.0  # Placeholder estimate
 
             metrics = {
                 "cpu_percent": cpu_percent,

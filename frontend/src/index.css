@@ -71,10 +71,19 @@
 }
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 body {
   margin: 0;
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  color: #09090b;
+  background-color: #ffffff;
+}
+
+input,
+select,
+textarea {
+  color: #09090b;
+  background-color: #ffffff;
 }

@@ -10,9 +10,9 @@ function getApiBaseUrl(): string {
   
   // Check if running in GitHub Codespaces
   if (typeof window !== 'undefined' && window.location.hostname.includes('.app.github.dev')) {
-    // In Codespaces, replace the port in the subdomain (e.g., -5173 -> -8000)
+    // In Codespaces, replace the port in the subdomain (e.g., -5173 -> -8001)
     const hostname = window.location.hostname;
-    const backendHostname = hostname.replace(/-\d+\.app\.github\.dev$/, '-8000.app.github.dev');
+    const backendHostname = hostname.replace(/-\d+\.app\.github\.dev$/, '-8001.app.github.dev');
     return `${window.location.protocol}//${backendHostname}`;
   }
   
@@ -22,13 +22,13 @@ function getApiBaseUrl(): string {
      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
   
   if (isDev) {
-    return 'http://127.0.0.1:8000';
+    return 'http://127.0.0.1:8001';
   }
   
   // Fallback: infer from current location
   const inferred = (typeof window !== 'undefined')
-    ? `${window.location.protocol}//${window.location.hostname}:8000`
-    : 'http://127.0.0.1:8000';
+    ? `${window.location.protocol}//${window.location.hostname}:8001`
+    : 'http://127.0.0.1:8001';
   
   return inferred;
 }
@@ -491,6 +491,83 @@ export const autoscaling = {
   evaluateNow: () =>
     request<{ status: string; message: string }>('/autoscaling/evaluate-now', {
       method: 'POST',
+      headers: authHeaders(),
+    }),
+};
+
+// Docker Hub interfaces
+export interface DockerHubImage {
+  name: string;
+  namespace: string;
+  full_name: string;
+  description: string;
+  star_count: number;
+  pull_count: number;
+  pull_count_formatted: string;
+  is_official: boolean;
+  is_automated: boolean;
+  last_updated?: string;
+  logo_url?: string;
+}
+
+export interface DockerHubTag {
+  name: string;
+  full_size: number;
+  size_formatted: string;
+  last_updated: string;
+  digest?: string;
+}
+
+export const dockerhub = {
+  search: (query: string, page: number = 1, pageSize: number = 25, officialOnly: boolean = false) =>
+    request<{
+      success: boolean;
+      total_count: number;
+      page: number;
+      page_size: number;
+      images: DockerHubImage[];
+    }>(`/dockerhub/search?q=${encodeURIComponent(query)}&page=${page}&page_size=${pageSize}&official_only=${officialOnly}`, {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+  getPopular: (category?: string, limit: number = 20) =>
+    request<{
+      success: boolean;
+      count: number;
+      category?: string;
+      images: DockerHubImage[];
+    }>(`/dockerhub/popular?${category ? `category=${category}&` : ''}limit=${limit}`, {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+  getCategories: () =>
+    request<{
+      success: boolean;
+      categories: Record<string, string[]>;
+    }>('/dockerhub/categories', {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+  getImageDetails: (namespace: string, imageName: string) =>
+    request<{
+      success: boolean;
+      image: DockerHubImage;
+      tags: DockerHubTag[];
+    }>(`/dockerhub/image/${namespace}/${imageName}`, {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+  getFeatured: () =>
+    request<{
+      success: boolean;
+      featured: Array<{
+        name: string;
+        namespace: string;
+        description: string;
+        image_string: string;
+      }>;
+    }>('/dockerhub/featured', {
+      method: 'GET',
       headers: authHeaders(),
     }),
 };

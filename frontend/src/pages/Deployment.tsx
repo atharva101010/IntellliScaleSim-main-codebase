@@ -74,7 +74,7 @@ export default function Deployment() {
                 </div>
                 <button
                     onClick={() => setIsDeployModalOpen(true)}
-                    className="px-6 py-3 bg-rose-500 text-white font-semibold rounded-lg hover:bg-rose-600 transition shadow-sm"
+                    className="px-6 py-3 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-700 transition shadow-sm"
                 >
                     + Deploy New Container
                 </button>
@@ -84,7 +84,7 @@ export default function Deployment() {
                 <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-4 py-2 rounded-lg border border-slate-300 bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 outline-none"
+                    className="px-4 py-2 rounded-lg border border-slate-300 bg-white focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none"
                 >
                     <option value="">All Statuses</option>
                     <option value="running">Running</option>
@@ -97,12 +97,12 @@ export default function Deployment() {
             {loading ? (
                 <div className="flex items-center justify-center py-12">
                     <div className="text-center">
-                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-rose-500"></div>
+                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900"></div>
                         <p className="text-slate-600 mt-3">Loading containers...</p>
                     </div>
                 </div>
             ) : error ? (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg">
+                <div className="bg-slate-100 border border-slate-300 text-slate-900 px-6 py-4 rounded-lg">
                     {error}
                 </div>
             ) : containers.length === 0 ? (
@@ -116,7 +116,7 @@ export default function Deployment() {
                     <p className="text-slate-600 mb-6">Deploy your first container to get started</p>
                     <button
                         onClick={() => setIsDeployModalOpen(true)}
-                        className="px-6 py-2.5 bg-rose-500 text-white font-semibold rounded-lg hover:bg-rose-600 transition"
+                        className="px-6 py-2.5 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-700 transition"
                     >
                         Deploy Container
                     </button>

@@ -14,6 +14,10 @@ from app.models.user import User
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
+# Get JWT settings with fallback support
+JWT_SECRET = settings.get_jwt_secret()
+JWT_ALGORITHM = settings.get_jwt_algorithm()
+
 
 def get_password_hash(password: str) -> str:
 	return pwd_context.hash(password)
@@ -28,14 +32,14 @@ def create_access_token(data: dict[str, Any], expires_minutes: Optional[int] = N
 	expire_minutes = expires_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
 	expire = datetime.now(timezone.utc) + timedelta(minutes=expire_minutes)
 	to_encode.update({"exp": expire})
-	encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+	encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
 	return encoded_jwt
 
 
 def decode_token(token: str) -> dict[str, Any]:
 	"""Decode and validate JWT token."""
 	try:
-		payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+		payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
 		return payload
 	except JWTError:
 		raise HTTPException(

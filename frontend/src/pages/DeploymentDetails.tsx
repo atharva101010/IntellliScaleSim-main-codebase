@@ -1,18 +1,20 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api, Container, ContainerLogsResponse } from '../utils/api'
+import { useAuth } from '../hooks/useAuth'
 import { format } from 'date-fns'
 
 const statusColors = {
-    running: 'bg-emerald-100 text-emerald-800',
+    running: 'bg-slate-100 text-slate-900',
     stopped: 'bg-slate-100 text-slate-700',
-    pending: 'bg-amber-100 text-amber-800',
-    error: 'bg-red-100 text-red-800',
+    pending: 'bg-slate-200 text-slate-900',
+    error: 'bg-slate-300 text-slate-900',
 }
 
 export default function DeploymentDetails() {
     const { id } = useParams<{ id: string }>()
     const navigate = useNavigate()
+    const { user } = useAuth()
     const [container, setContainer] = useState<Container | null>(null)
     const [logs, setLogs] = useState<ContainerLogsResponse | null>(null)
     const [loading, setLoading] = useState(true)
@@ -68,7 +70,8 @@ export default function DeploymentDetails() {
 
         try {
             await api.deleteContainer(parseInt(id))
-            navigate('/student/deployments')
+            const role = user?.role || 'student'
+            navigate(`/${role}/deployments`)
         } catch (err: any) {
             alert(err?.message || 'Failed to delete container')
         }
@@ -78,7 +81,7 @@ export default function DeploymentDetails() {
         return (
             <div className="flex items-center justify-center py-12">
                 <div className="text-center">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-rose-500"></div>
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900"></div>
                     <p className="text-slate-600 mt-3">Loading container details...</p>
                 </div>
             </div>
@@ -87,7 +90,7 @@ export default function DeploymentDetails() {
 
     if (error || !container) {
         return (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg">
+            <div className="bg-slate-100 border border-slate-300 text-slate-900 px-6 py-4 rounded-lg">
                 {error || 'Container not found'}
             </div>
         )
@@ -160,7 +163,7 @@ export default function DeploymentDetails() {
                             </div>
                             <div className="w-full bg-slate-200 rounded-full h-2">
                                 <div
-                                    className="bg-rose-500 h-2 rounded-full"
+                                    className="bg-slate-900 h-2 rounded-full"
                                     style={{ width: `${(container.cpu_limit / 4000) * 100}%` }}
                                 ></div>
                             </div>
@@ -172,7 +175,7 @@ export default function DeploymentDetails() {
                             </div>
                             <div className="w-full bg-slate-200 rounded-full h-2">
                                 <div
-                                    className="bg-rose-500 h-2 rounded-full"
+                                    className="bg-slate-900 h-2 rounded-full"
                                     style={{ width: `${(container.memory_limit / 8192) * 100}%` }}
                                 ></div>
                             </div>
@@ -200,7 +203,7 @@ export default function DeploymentDetails() {
                 <h3 className="text-lg font-bold text-slate-900 mb-4">Container Logs</h3>
                 <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm overflow-x-auto">
                     {logs?.logs.map((log, idx) => (
-                        <div key={idx} className="text-emerald-400">
+                        <div key={idx} className="text-slate-200">
                             {log}
                         </div>
                     )) || <div className="text-slate-500">No logs available</div>}
@@ -211,14 +214,14 @@ export default function DeploymentDetails() {
                 {container.status === 'running' ? (
                     <button
                         onClick={handleStop}
-                        className="px-6 py-2.5 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 transition"
+                        className="px-6 py-2.5 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-700 transition"
                     >
                         Stop Container
                     </button>
                 ) : container.status === 'stopped' ? (
                     <button
                         onClick={handleStart}
-                        className="px-6 py-2.5 bg-emerald-500 text-white font-semibold rounded-lg hover:bg-emerald-600 transition"
+                        className="px-6 py-2.5 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-700 transition"
                     >
                         Start Container
                     </button>
@@ -226,7 +229,7 @@ export default function DeploymentDetails() {
 
                 <button
                     onClick={handleDelete}
-                    className="px-6 py-2.5 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition"
+                    className="px-6 py-2.5 border border-slate-300 bg-white text-slate-900 font-semibold rounded-lg hover:bg-slate-100 transition"
                 >
                     Delete Container
                 </button>
