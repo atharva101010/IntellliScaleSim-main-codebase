@@ -22,6 +22,42 @@ class AutoScalerService:
     def __init__(self, db: Session, docker_service: DockerService):
         self.db = db
         self.docker_service = docker_service
+
+    def _cleanup_stale_policy_reference(
+        self,
+        policy: ScalingPolicy,
+        container: Optional[Container],
+        reason: str,
+    ) -> None:
+        """Disable stale policy references and mark non-simulated containers as stopped."""
+        now = datetime.now(timezone.utc)
+
+        if policy.enabled:
+            policy.enabled = False
+            policy.updated_at = now
+
+        if container and container.deployment_type != "simulated":
+            container.status = ContainerStatus.stopped
+            container.stopped_at = now
+            container.container_id = None
+
+        self.db.commit()
+
+        target_container_id = container.id if container else policy.container_id
+        logger.warning(
+            f"Disabled stale scaling policy {policy.id} for container {target_container_id}: {reason}"
+        )
+    
+    def _ensure_utc_aware(self, dt: datetime) -> datetime:
+        """Ensure datetime is timezone-aware (UTC)"""
+        if dt is None:
+            return None
+        try:
+            if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+                return dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
     
     def get_current_replica_count(self, container_id: int) -> int:
         """Get current number of replicas for a container"""
@@ -52,14 +88,17 @@ class AutoScalerService:
     async def get_container_metrics(self, container_id: int) -> Optional[dict]:
         """Get current CPU and memory metrics for a container"""
         try:
-            import random
-            
             container = self.db.query(Container).filter(Container.id == container_id).first()
             if not container:
                 return None
             
             # For real Docker containers
             if container.container_id:
+                if not self.docker_service.container_exists(container.container_id):
+                    logger.info(
+                        f"Skipping metrics for missing Docker container id {container.container_id[:12]} (container {container.id})"
+                    )
+                    return None
                 try:
                     stats = await self.docker_service.get_container_stats_async(container.container_id)
                     # Convert stats to the format expected by autoscaler
@@ -73,42 +112,12 @@ class AutoScalerService:
                     }
                 except Exception as stats_err:
                     logger.warning(f"Failed to get real stats for container {container_id}: {stats_err}")
-            
-            # Simulated container - generate metrics that will demonstrate scaling
-            # Create a pattern that varies enough to trigger scaling events
-            # Use random walk to create more realistic load patterns
-            import time
-            current_time = time.time()
-            
-            # Create repeating patterns: low -> high -> low cycles
-            cycle_duration = 120  # 120 second cycles (2 minutes)
-            cycle_position = (current_time % cycle_duration) / cycle_duration
-            
-            # Create patterns that cross thresholds
-            if cycle_position < 0.3:
-                # Low load phase (0-30% of cycle)
-                base_cpu = random.uniform(10, 25)
-                base_memory = random.uniform(15, 30)
-            elif cycle_position < 0.7:
-                # High load phase (30-70% of cycle) - triggers scale up
-                base_cpu = random.uniform(75, 95)
-                base_memory = random.uniform(75, 95)
-            else:
-                # Back to low (70-100% of cycle)
-                base_cpu = random.uniform(10, 25)
-                base_memory = random.uniform(15, 30)
-            
-            # Add some noise
-            base_cpu += random.uniform(-5, 5)
-            base_memory += random.uniform(-5, 5)
-            
-            # Clamp to 0-100%
-            base_cpu = max(0, min(100, base_cpu))
-            base_memory = max(0, min(100, base_memory))
-            
+
+            # No runtime stats are available for non-Docker/simulated containers.
+            # Keep this deterministic to avoid fake scaling activity.
             return {
-                'cpu_percent': round(base_cpu, 2),
-                'memory_percent': round(base_memory, 2)
+                'cpu_percent': 0.0,
+                'memory_percent': 0.0
             }
             
         except Exception as e:
@@ -125,7 +134,8 @@ class AutoScalerService:
         
         # Check cooldown period
         if policy.last_scaled_at:
-            time_since_scale = (datetime.now(timezone.utc) - policy.last_scaled_at).total_seconds()
+            last_scaled = self._ensure_utc_aware(policy.last_scaled_at)
+            time_since_scale = (datetime.now(timezone.utc) - last_scaled).total_seconds()
             if time_since_scale < policy.cooldown_period:
                 return False, "cooldown_active"
         
@@ -151,7 +161,8 @@ class AutoScalerService:
         
         # Check cooldown period
         if policy.last_scaled_at:
-            time_since_scale = (datetime.now(timezone.utc) - policy.last_scaled_at).total_seconds()
+            last_scaled = self._ensure_utc_aware(policy.last_scaled_at)
+            time_since_scale = (datetime.now(timezone.utc) - last_scaled).total_seconds()
             if time_since_scale < policy.cooldown_period:
                 return False, "cooldown_active"
         
@@ -328,6 +339,26 @@ class AutoScalerService:
     async def evaluate_policy(self, policy: ScalingPolicy) -> None:
         """Evaluate a single policy and take action if needed"""
         try:
+            container = self.db.query(Container).filter(Container.id == policy.container_id).first()
+            if not container:
+                self._cleanup_stale_policy_reference(policy, None, "container_record_missing")
+                return
+
+            if container.status != ContainerStatus.running:
+                logger.debug(
+                    f"Skipping policy {policy.id}: container {container.id} status is {container.status}"
+                )
+                return
+
+            if container.deployment_type != "simulated":
+                if not container.container_id:
+                    self._cleanup_stale_policy_reference(policy, container, "container_id_missing")
+                    return
+
+                if not self.docker_service.container_exists(container.container_id):
+                    self._cleanup_stale_policy_reference(policy, container, "docker_container_missing")
+                    return
+
             # Get current metrics
             metrics = await self.get_container_metrics(policy.container_id)
             if not metrics:

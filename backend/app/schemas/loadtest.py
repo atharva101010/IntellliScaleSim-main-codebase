@@ -19,6 +19,7 @@ class LoadTestStatus(str, Enum):
 class LoadTestCreate(BaseModel):
     """Schema for creating a new load test"""
     container_id: int = Field(..., description="ID of the container to test")
+    profile: Optional[str] = Field(None, description="Optional preset profile: easy, medium, heavy")
     target_url: Optional[str] = Field(None, description="Optional custom URL to test (defaults to container URL)")
     total_requests: int = Field(..., ge=1, le=50000, description="Total number of requests (1-50000)")
     concurrency: int = Field(..., ge=1, le=500, description="Number of concurrent requests (1-500)")
@@ -140,3 +141,12 @@ class LoadTestStartResponse(BaseModel):
 class LoadTestCancelResponse(BaseModel):
     """Response when load test is cancelled"""
     message: str
+
+
+class LoadTestProfileResponse(BaseModel):
+    """Predefined load test profile returned by API."""
+    name: str
+    label: str
+    total_requests: int
+    concurrency: int
+    duration_seconds: int

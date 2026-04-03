@@ -235,6 +235,8 @@ pip install -r requirements.txt
 # Copy and configure environment
 cp .env.example .env
 # Edit .env and add your GROQ_API_KEY
+# Optional: use Docker PostgreSQL from host (avoids local Postgres 5432 conflicts)
+# DATABASE_URL=postgresql://intelliscale:intelliscale_secret_2024@127.0.0.1:5433/intelliscale_db
 
 # Start the server
 uvicorn app.main:app --reload --port 8001

@@ -33,6 +33,17 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SERVER_ROOT_URL=http://localhost:3500
       - GF_INSTALL_PLUGINS=
+      # Enable embedding and anonymous access for dashboard
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_NAME=Main Org.
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_AUTH_DISABLE_LOGIN_FORM=false
+      - GF_SECURITY_COOKIE_SAMESITE=disabled
+      - GF_SECURITY_COOKIE_SECURE=false
+      # CORS settings for embedding
+      - GF_SECURITY_X_CONTENT_TYPE_OPTIONS=false
+      - GF_SECURITY_X_XSS_PROTECTION=false
     restart: unless-stopped
     networks:
       - monitoring

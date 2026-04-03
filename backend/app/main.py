@@ -9,7 +9,9 @@ from app.api import (
     routes_autoscaling, 
     routes_billing,
     routes_dockerhub,
-    routes_profile
+    routes_profile,
+    routes_admin,
+    routes_classes,
 )
 from app.models.base import Base
 from app.database.session import engine
@@ -19,6 +21,7 @@ import logging
 import asyncio
 import time
 import os
+from datetime import datetime, timezone
 from starlette.middleware.base import BaseHTTPMiddleware
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
@@ -168,6 +171,8 @@ app.include_router(routes_autoscaling.router)
 app.include_router(routes_billing.router)
 app.include_router(routes_dockerhub.router)  # Docker Hub API
 app.include_router(routes_profile.router)    # User Profile API
+app.include_router(routes_admin.router)      # Admin-only system and user management APIs
+app.include_router(routes_classes.router)    # Teacher/admin classroom APIs
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +210,8 @@ async def billing_metrics_background_task():
     from app.services.billing_service import BillingService
     from app.services.prometheus_metrics_service import prometheus_metrics_service
     from app.database.session import SessionLocal
-    from app.models.container import Container
+    from app.models.container import Container, ContainerStatus
+    from app.models.scaling_policy import ScalingPolicy
     
     logger.info("💰 Billing metrics collection task started")
     
@@ -218,11 +224,33 @@ async def billing_metrics_background_task():
                 billing_service = BillingService(db)
                 
                 # Get all running containers
-                containers = db.query(Container).filter(Container.status == 'running').all()
+                containers = db.query(Container).filter(Container.status == ContainerStatus.running).all()
                 
                 count = 0
+                stale_count = 0
                 for container in containers:
                     if container.container_id:
+                        if not billing_service.docker_service.container_exists(container.container_id):
+                            logger.warning(
+                                f"Detected stale runtime container reference for DB container {container.id}. Marking as stopped and disabling active policies."
+                            )
+                            container.status = ContainerStatus.stopped
+                            container.stopped_at = datetime.now(timezone.utc)
+                            container.container_id = None
+                            db.query(ScalingPolicy).filter(
+                                ScalingPolicy.container_id == container.id,
+                                ScalingPolicy.enabled == True,
+                            ).update(
+                                {
+                                    ScalingPolicy.enabled: False,
+                                    ScalingPolicy.updated_at: datetime.now(timezone.utc),
+                                },
+                                synchronize_session=False,
+                            )
+                            db.commit()
+                            stale_count += 1
+                            continue
+
                         try:
                             metrics = await billing_service.collect_container_metrics(container)
                             if metrics:
@@ -240,6 +268,8 @@ async def billing_metrics_background_task():
                 
                 if count > 0:
                     logger.info(f"📊 Collected billing metrics for {count} containers")
+                if stale_count > 0:
+                    logger.info(f"🧹 Cleaned {stale_count} stale container references")
             finally:
                 db.close()
             
@@ -255,32 +285,14 @@ async def on_startup():
     ensure_columns(engine)
     
     
-    # Initialize default demo user and billing models
+    # Initialize billing pricing models (no fake user seeding by default)
     try:
-        from app.core.security import get_password_hash
-        from app.models.user import User, UserRole
         from app.services.billing_service import BillingService
         from app.database.session import SessionLocal
         
         db = SessionLocal()
-        
-        # 1. Seed demo user
-        demo_email = "demo@test.com"
-        demo_user = db.query(User).filter(User.email == demo_email).first()
-        if not demo_user:
-            logger.info(f"👤 Creating default demo user: {demo_email}")
-            new_user = User(
-                name="Demo User",
-                email=demo_email,
-                password_hash=get_password_hash("Password123!"),
-                role=UserRole.admin,
-                is_verified=True
-            )
-            db.add(new_user)
-            db.commit()
-            logger.info("✅ Default demo user created successfully")
-            
-        # 2. Seed billing pricing models
+
+        # Seed billing pricing models
         billing_service = BillingService(db)
         billing_service.initialize_pricing_models()
         logger.info("💰 Billing pricing models initialized")

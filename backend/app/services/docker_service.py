@@ -67,6 +67,19 @@ class DockerService:
                 "Docker CLI not found. Please ensure Docker Desktop is installed and in PATH."
             ) from e
 
+    @staticmethod
+    def _empty_stats() -> dict:
+        return {
+            "cpu_percent": 0,
+            "memory_usage_mb": 0,
+            "memory_limit_mb": 0,
+            "memory_percent": 0,
+            "network_rx_bytes": 0,
+            "network_tx_bytes": 0,
+            "network_rx_mb": 0,
+            "network_tx_mb": 0,
+        }
+
     def _parse_sdk_stats(self, stats: dict) -> dict:
         """Normalize Docker SDK stats payload to service output shape."""
         cpu_stats = stats.get("cpu_stats", {})
@@ -616,6 +629,33 @@ class DockerService:
 
         return last_status
 
+    def container_exists(self, container_id: str) -> bool:
+        """Check if a Docker container exists without raising noisy errors for stale IDs."""
+        if not container_id:
+            return False
+
+        try:
+            client = self._get_client()
+            client.containers.get(container_id)
+            return True
+        except NotFound:
+            return False
+        except Exception as sdk_err:
+            logger.debug(f"Docker SDK existence check fallback for {container_id[:12]}: {sdk_err}")
+
+        try:
+            self._run_command(["inspect", container_id], capture_output=True)
+            return True
+        except subprocess.CalledProcessError as e:
+            stderr = (e.stderr or "").lower()
+            if "no such object" in stderr or "no such container" in stderr:
+                return False
+            logger.warning(f"Docker CLI existence check failed for {container_id[:12]}: {e.stderr}")
+            return False
+        except Exception as cli_err:
+            logger.debug(f"Docker CLI existence fallback failed for {container_id[:12]}: {cli_err}")
+            return False
+
     def get_container_logs(self, container_id: str, tail: int = 100) -> str:
         """Get container logs."""
         try:
@@ -646,6 +686,9 @@ class DockerService:
             raw_stats = container.stats(stream=False)
             stats = raw_stats if isinstance(raw_stats, dict) else {}
             return self._parse_sdk_stats(stats)
+        except NotFound:
+            logger.debug(f"Container {container_id[:12]} not found while collecting stats")
+            return self._empty_stats()
         except Exception as sdk_err:
             logger.warning(f"Docker SDK stats failed, falling back to CLI for {container_id}: {sdk_err}")
 
@@ -653,16 +696,7 @@ class DockerService:
             result = self._run_command(["stats", container_id, "--no-stream", "--format", "{{json .}}"], capture_output=True)
             output = result.stdout.strip()
             if not output:
-                return {
-                    "cpu_percent": 0,
-                    "memory_usage_mb": 0,
-                    "memory_limit_mb": 0,
-                    "memory_percent": 0,
-                    "network_rx_bytes": 0,
-                    "network_tx_bytes": 0,
-                    "network_rx_mb": 0,
-                    "network_tx_mb": 0,
-                }
+                return self._empty_stats()
 
             lines = [line.strip() for line in output.split("\n") if line.strip()]
             clean_line = lines[-1]
@@ -706,18 +740,16 @@ class DockerService:
                 "network_rx_mb": 0,
                 "network_tx_mb": 0,
             }
+        except subprocess.CalledProcessError as e:
+            stderr = (e.stderr or "").lower()
+            if "no such object" in stderr or "no such container" in stderr:
+                logger.debug(f"Container {container_id[:12]} not found in CLI stats path")
+            else:
+                logger.warning(f"Failed to get sync container stats for {container_id}: {e}")
+            return self._empty_stats()
         except Exception as e:
             logger.warning(f"Failed to get sync container stats for {container_id}: {e}")
-            return {
-                "cpu_percent": 0,
-                "memory_usage_mb": 0,
-                "memory_limit_mb": 0,
-                "memory_percent": 0,
-                "network_rx_bytes": 0,
-                "network_tx_bytes": 0,
-                "network_rx_mb": 0,
-                "network_tx_mb": 0,
-            }
+            return self._empty_stats()
 
 
 _docker_service = None

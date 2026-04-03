@@ -11,6 +11,7 @@ const badgeVariants = cva('inline-flex items-center rounded-full px-2.5 py-0.5 t
       outline: 'border border-slate-300 text-slate-700',
       success: 'bg-slate-800 text-white',
       danger: 'bg-white text-slate-900 border border-slate-400',
+      warning: 'bg-amber-500 text-white',
     },
   },
   defaultVariants: {

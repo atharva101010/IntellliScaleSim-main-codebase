@@ -82,6 +82,7 @@ export default function Sidebar() {
     { to: '/admin/users', label: 'Users', icon: Users },
     { to: '/admin/systems', label: 'Systems', icon: ServerCog },
     { to: '/admin/settings', label: 'Settings', icon: Settings },
+    { to: '/admin/profile', label: 'Profile', icon: UserCircle2 },
   ]
 
   const navItems = role === 'teacher' ? teacherItems : role === 'admin' ? adminItems : studentItems

@@ -29,11 +29,20 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    requested_role = UserRole(payload.role)
+    if requested_role == UserRole.admin:
+        has_admin = db.query(User.id).filter(User.role == UserRole.admin).first()
+        if has_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin accounts can only be assigned by an existing admin",
+            )
+
     user = User(
         name=payload.name,
         email=payload.email.lower(),
         password_hash=get_password_hash(payload.password),
-        role=UserRole(payload.role),
+        role=requested_role,
         is_verified=True,  # Auto-verify users (email system not configured)
     )
     db.add(user)

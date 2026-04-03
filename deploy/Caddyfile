@@ -1,0 +1,53 @@
+{
+  email {$ACME_EMAIL}
+  admin off
+}
+
+www.{$DOMAIN} {
+  redir https://{$DOMAIN}{uri} permanent
+}
+
+{$DOMAIN} {
+  encode zstd gzip
+
+  header {
+    X-Frame-Options "SAMEORIGIN"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "geolocation=(), camera=(), microphone=()"
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    -Server
+  }
+
+  # Public API under /api
+  handle_path /api/* {
+    reverse_proxy backend:8001
+  }
+
+  # Optional direct backend utility endpoints
+  handle /docs* {
+    reverse_proxy backend:8001
+  }
+  handle /openapi.json {
+    reverse_proxy backend:8001
+  }
+  handle /healthz {
+    reverse_proxy backend:8001
+  }
+
+  # Grafana exposed under /grafana
+  handle /grafana/* {
+    uri strip_prefix /grafana
+    reverse_proxy grafana:3000
+  }
+
+  # Frontend application
+  handle {
+    reverse_proxy frontend:80
+  }
+
+  log {
+    output file /var/log/caddy/access.log
+    format json
+  }
+}
