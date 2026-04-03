@@ -12,6 +12,10 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Optional build-time API endpoint override (used in VPS production compose).
+ARG VITE_API_URL=
+ENV VITE_API_URL=${VITE_API_URL}
+
 # Build the application
 RUN npm run build
 

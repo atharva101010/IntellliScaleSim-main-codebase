@@ -1,6 +1,10 @@
 from app.core.config import settings
 import smtplib
 from email.message import EmailMessage
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def _send_via_smtp(to: str, subject: str, body: str) -> None:
@@ -33,8 +37,11 @@ def _send_via_smtp(to: str, subject: str, body: str) -> None:
 def send_email(to: str, subject: str, body: str) -> None:
     """Send email using SMTP if configured, otherwise log to stdout."""
     if settings.SMTP_HOST and settings.SMTP_PORT:
-        _send_via_smtp(to, subject, body)
-        return
+        try:
+            _send_via_smtp(to, subject, body)
+            return
+        except Exception as exc:
+            logger.warning("SMTP send failed, falling back to console output: %s", exc)
 
     # Fallback: log to console
     print("=== EMAIL (DRY-RUN) ===")

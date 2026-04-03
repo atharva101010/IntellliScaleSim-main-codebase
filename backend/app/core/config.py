@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     # Default uses local SQLite file. Override via .env for PostgreSQL in production.
     DATABASE_URL: str = "sqlite:///./app.db"
+    SUPABASE_DB_URL: Optional[str] = None
 
     CORS_ORIGINS: str = "*"
 
@@ -73,6 +74,10 @@ class Settings(BaseSettings):
     def get_jwt_algorithm(self) -> str:
         """Get JWT algorithm, supporting both naming conventions"""
         return self.ALGORITHM or self.JWT_ALGORITHM
+
+    def get_database_url(self) -> str:
+        """Resolve database URL with Supabase override support."""
+        return self.SUPABASE_DB_URL or self.DATABASE_URL
 
 
 settings = Settings()

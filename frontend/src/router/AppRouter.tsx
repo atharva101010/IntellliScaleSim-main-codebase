@@ -19,7 +19,10 @@ import AutoScaling from '../pages/AutoScaling'
 import LoadTesting from '../pages/LoadTesting'
 import Billing from '../pages/Billing'
 import Profile from '../pages/Profile'
-import PlaceholderPage from '../pages/PlaceholderPage'
+import Classes from '../pages/Classes'
+import UsersAdmin from '../pages/UsersAdmin'
+import Systems from '../pages/Systems'
+import Settings from '../pages/Settings'
 
 const Protected: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { token } = useAuth()
@@ -66,7 +69,7 @@ export default function AppRouter() {
           <Route path="/teacher/guides" element={<Protected><RoleGate role="teacher"><DashboardLayout><DeploymentGuides /></DashboardLayout></RoleGate></Protected>} />
           <Route path="/teacher/monitoring" element={<Protected><RoleGate role="teacher"><DashboardLayout><Monitoring /></DashboardLayout></RoleGate></Protected>} />
           <Route path="/teacher/billing" element={<Protected><RoleGate role="teacher"><DashboardLayout><Billing /></DashboardLayout></RoleGate></Protected>} />
-          <Route path="/teacher/classes" element={<Protected><RoleGate role="teacher"><DashboardLayout><PlaceholderPage title="Classes" description="Class management and enrollment tools." /></DashboardLayout></RoleGate></Protected>} />
+          <Route path="/teacher/classes" element={<Protected><RoleGate role="teacher"><DashboardLayout><Classes /></DashboardLayout></RoleGate></Protected>} />
           <Route path="/teacher/profile" element={<Protected><RoleGate role="teacher"><DashboardLayout><Profile /></DashboardLayout></RoleGate></Protected>} />
           <Route path="/admin" element={<Protected><RoleGate role="admin"><DashboardLayout><AdminDashboard /></DashboardLayout></RoleGate></Protected>} />
           <Route path="/admin/deployments" element={<Protected><RoleGate role="admin"><DashboardLayout><Deployment /></DashboardLayout></RoleGate></Protected>} />
@@ -76,9 +79,9 @@ export default function AppRouter() {
           <Route path="/admin/autoscaling" element={<Protected><RoleGate role="admin"><DashboardLayout><AutoScaling /></DashboardLayout></RoleGate></Protected>} />
           <Route path="/admin/loadtest" element={<Protected><RoleGate role="admin"><DashboardLayout><LoadTesting /></DashboardLayout></RoleGate></Protected>} />
           <Route path="/admin/billing" element={<Protected><RoleGate role="admin"><DashboardLayout><Billing /></DashboardLayout></RoleGate></Protected>} />
-          <Route path="/admin/users" element={<Protected><RoleGate role="admin"><DashboardLayout><PlaceholderPage title="Users" description="User administration tools and access controls." /></DashboardLayout></RoleGate></Protected>} />
-          <Route path="/admin/systems" element={<Protected><RoleGate role="admin"><DashboardLayout><PlaceholderPage title="Systems" description="System diagnostics and operational controls." /></DashboardLayout></RoleGate></Protected>} />
-          <Route path="/admin/settings" element={<Protected><RoleGate role="admin"><DashboardLayout><PlaceholderPage title="Settings" description="Platform configuration and policy settings." /></DashboardLayout></RoleGate></Protected>} />
+          <Route path="/admin/users" element={<Protected><RoleGate role="admin"><DashboardLayout><UsersAdmin /></DashboardLayout></RoleGate></Protected>} />
+          <Route path="/admin/systems" element={<Protected><RoleGate role="admin"><DashboardLayout><Systems /></DashboardLayout></RoleGate></Protected>} />
+          <Route path="/admin/settings" element={<Protected><RoleGate role="admin"><DashboardLayout><Settings /></DashboardLayout></RoleGate></Protected>} />
           <Route path="/admin/profile" element={<Protected><RoleGate role="admin"><DashboardLayout><Profile /></DashboardLayout></RoleGate></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

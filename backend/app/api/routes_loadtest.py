@@ -21,7 +21,8 @@ from app.schemas.loadtest import (
     LoadTestHistoryResponse,
     LoadTestListItem,
     LoadTestCancelResponse,
-    LoadTestStreamMetric
+    LoadTestStreamMetric,
+    LoadTestProfileResponse,
 )
 from app.services.loadtest_service import LoadTestService
 from app.services.docker_service import DockerService
@@ -29,10 +30,52 @@ from app.services.docker_service import DockerService
 router = APIRouter(prefix="/loadtest", tags=["loadtest"])
 
 
+LOAD_TEST_PROFILES = {
+    "easy": {"label": "Easy", "total_requests": 500, "concurrency": 10, "duration_seconds": 30},
+    "medium": {"label": "Medium", "total_requests": 5000, "concurrency": 100, "duration_seconds": 60},
+    "heavy": {"label": "Heavy", "total_requests": 25000, "concurrency": 300, "duration_seconds": 120},
+}
+
+
+def _role_value(user: User) -> str:
+    return user.role.value if hasattr(user.role, "value") else str(user.role)
+
+
+def _can_access_container_for_test(current_user: User, container: Container, db: Session) -> bool:
+    role = _role_value(current_user)
+
+    if role == "admin":
+        return True
+
+    if container.user_id == current_user.id:
+        return True
+
+    if role == "student":
+        return False
+
+    owner = db.query(User.id, User.role).filter(User.id == container.user_id).first()
+    if not owner:
+        return False
+
+    owner_role = owner.role.value if hasattr(owner.role, "value") else str(owner.role)
+    return owner_role == "student"
+
+
 def get_load_test_service(db: Session = Depends(get_db)) -> LoadTestService:
     """Dependency to get load test service - creates new instance per request"""
     docker_service = DockerService()
     return LoadTestService(db, docker_service)
+
+
+@router.get("/profiles", response_model=List[LoadTestProfileResponse])
+def list_load_test_profiles(
+    _current_user: User = Depends(get_current_user),
+):
+    """Return supported load-test presets for UI and API clients."""
+    return [
+        LoadTestProfileResponse(name=name, label=data["label"], **{k: v for k, v in data.items() if k != "label"})
+        for name, data in LOAD_TEST_PROFILES.items()
+    ]
 
 
 
@@ -50,13 +93,24 @@ async def start_load_test(
     and queues the test for execution in the background
     """
     try:
-        # 1. Verify container exists and belongs to user
-        container = db.query(Container).filter(
-            Container.id == request.container_id,
-            Container.user_id == current_user.id
-        ).first()
+        # Optional profile overrides manual values when provided.
+        if request.profile:
+            profile_name = request.profile.strip().lower()
+            preset = LOAD_TEST_PROFILES.get(profile_name)
+            if not preset:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid load-test profile '{request.profile}'. Use one of: easy, medium, heavy",
+                )
+
+            request.total_requests = preset["total_requests"]
+            request.concurrency = preset["concurrency"]
+            request.duration_seconds = preset["duration_seconds"]
+
+        # 1. Verify container exists and role is allowed to test it
+        container = db.query(Container).filter(Container.id == request.container_id).first()
         
-        if not container:
+        if not container or not _can_access_container_for_test(current_user, container, db):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Container not found"
@@ -129,10 +183,11 @@ def get_load_test(
 ):
     """Get load test status and results"""
     # Query test
-    test = db.query(LoadTest).filter(
-        LoadTest.id == test_id,
-        LoadTest.user_id == current_user.id
-    ).first()
+    query = db.query(LoadTest).filter(LoadTest.id == test_id)
+    if _role_value(current_user) != "admin":
+        query = query.filter(LoadTest.user_id == current_user.id)
+
+    test = query.first()
     
     if not test:
         raise HTTPException(
@@ -177,11 +232,19 @@ async def stream_load_test_metrics(
             detail="Authentication required",
         )
 
-    # Verify test exists and belongs to authenticated user
-    test = db.query(LoadTest).filter(
-        LoadTest.id == test_id,
-        LoadTest.user_id == resolved_user_id
-    ).first()
+    requester = db.query(User).filter(User.id == resolved_user_id).first()
+    if not requester:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    # Verify test visibility for requester
+    query = db.query(LoadTest).filter(LoadTest.id == test_id)
+    if _role_value(requester) != "admin":
+        query = query.filter(LoadTest.user_id == resolved_user_id)
+
+    test = query.first()
     
     if not test:
         raise HTTPException(
@@ -250,7 +313,9 @@ def get_load_test_history(
 ):
     """Get load test history for user"""
     # Build query
-    query = db.query(LoadTest).filter(LoadTest.user_id == current_user.id)
+    query = db.query(LoadTest)
+    if _role_value(current_user) != "admin":
+        query = query.filter(LoadTest.user_id == current_user.id)
     
     if container_id:
         query = query.filter(LoadTest.container_id == container_id)
@@ -279,10 +344,11 @@ async def cancel_load_test(
 ):
     """Cancel a running load test"""
     # Verify test exists and belongs to user
-    test = db.query(LoadTest).filter(
-        LoadTest.id == test_id,
-        LoadTest.user_id == current_user.id
-    ).first()
+    query = db.query(LoadTest).filter(LoadTest.id == test_id)
+    if _role_value(current_user) != "admin":
+        query = query.filter(LoadTest.user_id == current_user.id)
+
+    test = query.first()
     
     if not test:
         raise HTTPException(

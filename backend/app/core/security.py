@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.database.session import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
@@ -72,4 +72,23 @@ def get_current_user(
 		)
 	
 	return user
+
+
+def require_roles(*roles: UserRole | str):
+	"""Dependency factory to enforce role-based access control on routes."""
+	allowed = {
+		(role.value if isinstance(role, UserRole) else str(role)).strip().lower()
+		for role in roles
+	}
+
+	def _checker(current_user: User = Depends(get_current_user)) -> User:
+		user_role = (current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)).strip().lower()
+		if user_role not in allowed:
+			raise HTTPException(
+				status_code=status.HTTP_403_FORBIDDEN,
+				detail="You do not have permission to perform this action",
+			)
+		return current_user
+
+	return _checker
 

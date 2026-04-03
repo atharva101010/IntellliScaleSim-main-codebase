@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { api } from '../utils/api'
+import { api, loadTestApi, type LoadTestProfile } from '../utils/api'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 
 interface Container {
@@ -63,6 +63,12 @@ interface TestResult {
     peak_memory: number
 }
 
+const DEFAULT_PROFILES: LoadTestProfile[] = [
+    { name: 'easy', label: 'Easy', total_requests: 500, concurrency: 10, duration_seconds: 30 },
+    { name: 'medium', label: 'Medium', total_requests: 5000, concurrency: 100, duration_seconds: 60 },
+    { name: 'heavy', label: 'Heavy', total_requests: 25000, concurrency: 300, duration_seconds: 120 },
+]
+
 export default function LoadTesting() {
     const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://127.0.0.1:8001'
     const [containers, setContainers] = useState<Container[]>([])
@@ -79,6 +85,8 @@ export default function LoadTesting() {
     const [eventSource, setEventSource] = useState<EventSource | null>(null)
     const [testHistory, setTestHistory] = useState<TestResult[]>([])
     const [showHistory, setShowHistory] = useState(false)
+    const [profiles, setProfiles] = useState<LoadTestProfile[]>(DEFAULT_PROFILES)
+    const [selectedProfile, setSelectedProfile] = useState<LoadTestProfile['name'] | null>(null)
 
     const ACTIVE_TEST_KEY = 'active_load_test_id'
     const HISTORY_KEY = 'load_test_history'
@@ -113,6 +121,7 @@ export default function LoadTesting() {
 
     useEffect(() => {
         fetchContainers()
+        fetchProfiles()
         checkForRunningTest()
         loadTestHistory()
     }, [])
@@ -129,6 +138,17 @@ export default function LoadTesting() {
             setContainers(response.containers || [])
         } catch (error) {
             console.error('Failed to fetch containers:', error)
+        }
+    }
+
+    const fetchProfiles = async () => {
+        try {
+            const response = await loadTestApi.listProfiles()
+            if (response.length > 0) {
+                setProfiles(response)
+            }
+        } catch {
+            setProfiles(DEFAULT_PROFILES)
         }
     }
 
@@ -212,6 +232,7 @@ export default function LoadTesting() {
                 },
                 body: JSON.stringify({
                     container_id: config.containerId,
+                    profile: selectedProfile,
                     total_requests: config.totalRequests,
                     concurrency: config.concurrency,
                     duration_seconds: config.durationSeconds
@@ -399,6 +420,55 @@ export default function LoadTesting() {
                     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-8 space-y-6">
                         <h2 className="text-2xl font-bold text-slate-900">Configure Test</h2>
 
+                        {/* Load Test Presets */}
+                        <div>
+                            <label className="block text-sm font-semibold text-slate-700 mb-3">Quick Presets</label>
+                            <div className="grid grid-cols-3 gap-4">
+                                {profiles.map((profile) => {
+                                    const tone = profile.name === 'easy'
+                                        ? {
+                                            card: 'border-green-200 bg-green-50 hover:border-green-400 hover:bg-green-100',
+                                            title: 'text-green-800',
+                                            desc: 'text-green-700',
+                                            meta: 'text-green-600',
+                                        }
+                                        : profile.name === 'medium'
+                                        ? {
+                                            card: 'border-amber-200 bg-amber-50 hover:border-amber-400 hover:bg-amber-100',
+                                            title: 'text-amber-800',
+                                            desc: 'text-amber-700',
+                                            meta: 'text-amber-600',
+                                        }
+                                        : {
+                                            card: 'border-red-200 bg-red-50 hover:border-red-400 hover:bg-red-100',
+                                            title: 'text-red-800',
+                                            desc: 'text-red-700',
+                                            meta: 'text-red-600',
+                                        }
+
+                                    return (
+                                        <button
+                                            key={profile.name}
+                                            onClick={() => {
+                                                setSelectedProfile(profile.name)
+                                                setConfig({
+                                                    ...config,
+                                                    totalRequests: profile.total_requests,
+                                                    concurrency: profile.concurrency,
+                                                    durationSeconds: profile.duration_seconds,
+                                                })
+                                            }}
+                                            className={`p-4 border-2 rounded-lg transition group ${tone.card} ${selectedProfile === profile.name ? 'ring-2 ring-slate-900/30' : ''}`}
+                                        >
+                                            <div className={`text-lg font-bold mb-1 ${tone.title}`}>{profile.label}</div>
+                                            <div className={`text-sm ${tone.desc}`}>{profile.total_requests.toLocaleString()} requests</div>
+                                            <div className={`text-xs ${tone.meta}`}>{profile.concurrency} concurrent • {profile.duration_seconds}s</div>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        </div>
+
                         {/* Container Selection */}
                         <div>
                             <label className="block text-sm font-semibold text-slate-700 mb-2">Container</label>
@@ -430,10 +500,13 @@ export default function LoadTesting() {
                                     min="1"
                                     max={MAX_TOTAL_REQUESTS}
                                     value={config.totalRequests}
-                                    onChange={(e) => setConfig({
-                                        ...config,
-                                        totalRequests: Math.max(1, Math.min(MAX_TOTAL_REQUESTS, parseInt(e.target.value) || 1))
-                                    })}
+                                    onChange={(e) => {
+                                        setConfig({
+                                            ...config,
+                                            totalRequests: Math.max(1, Math.min(MAX_TOTAL_REQUESTS, parseInt(e.target.value) || 1))
+                                        })
+                                        setSelectedProfile(null)
+                                    }}
                                     className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none transition font-bold text-2xl text-center"
                                 />
                                 {errors.requests && <p className="text-slate-700 text-sm mt-1 font-semibold">Validation: {errors.requests}</p>}
@@ -447,10 +520,13 @@ export default function LoadTesting() {
                                     min="1"
                                     max={MAX_CONCURRENCY}
                                     value={config.concurrency}
-                                    onChange={(e) => setConfig({
-                                        ...config,
-                                        concurrency: Math.max(1, Math.min(MAX_CONCURRENCY, parseInt(e.target.value) || 1))
-                                    })}
+                                    onChange={(e) => {
+                                        setConfig({
+                                            ...config,
+                                            concurrency: Math.max(1, Math.min(MAX_CONCURRENCY, parseInt(e.target.value) || 1))
+                                        })
+                                        setSelectedProfile(null)
+                                    }}
                                     className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none transition font-bold text-2xl text-center"
                                 />
                                 {errors.concurrency && <p className="text-slate-700 text-sm mt-1 font-semibold">Validation: {errors.concurrency}</p>}
@@ -464,10 +540,13 @@ export default function LoadTesting() {
                                     min="10"
                                     max={MAX_DURATION_SECONDS}
                                     value={config.durationSeconds}
-                                    onChange={(e) => setConfig({
-                                        ...config,
-                                        durationSeconds: Math.max(10, Math.min(MAX_DURATION_SECONDS, parseInt(e.target.value) || 10))
-                                    })}
+                                    onChange={(e) => {
+                                        setConfig({
+                                            ...config,
+                                            durationSeconds: Math.max(10, Math.min(MAX_DURATION_SECONDS, parseInt(e.target.value) || 10))
+                                        })
+                                        setSelectedProfile(null)
+                                    }}
                                     className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none transition font-bold text-2xl text-center"
                                 />
                                 {errors.duration && <p className="text-slate-700 text-sm mt-1 font-semibold">Validation: {errors.duration}</p>}

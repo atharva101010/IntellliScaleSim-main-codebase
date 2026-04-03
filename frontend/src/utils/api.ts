@@ -411,6 +411,119 @@ export const dashboard = {
     }),
 };
 
+export interface AdminUser {
+  id: number;
+  name: string;
+  email: string;
+  role: 'student' | 'teacher' | 'admin';
+  is_verified: boolean;
+  created_at: string;
+  containers_count: number;
+  status: 'active' | 'pending' | 'suspended';
+  last_login?: string | null;
+}
+
+export interface AdminSystemService {
+  id: string;
+  name: string;
+  status: 'running' | 'stopped' | 'degraded' | 'error';
+  uptime: string;
+  cpu: number;
+  memory: number;
+  last_check: string;
+}
+
+export interface AdminSystemMetrics {
+  cpu_usage: number;
+  memory_usage: number;
+  disk_usage: number;
+  network_in: number;
+  network_out: number;
+  active_connections: number;
+  request_rate: number;
+  error_rate: number;
+}
+
+export interface AdminSystemOverview {
+  services: AdminSystemService[];
+  metrics: AdminSystemMetrics;
+}
+
+export const adminApi = {
+  listUsers: () =>
+    request<AdminUser[]>('/admin/users', {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+  updateUserRole: (userId: number, role: 'student' | 'teacher' | 'admin') =>
+    request<AdminUser>(`/admin/users/${userId}/role`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ role }),
+    }),
+  deleteUser: (userId: number) =>
+    request<void>(`/admin/users/${userId}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    }),
+  getSystemsOverview: () =>
+    request<AdminSystemOverview>('/admin/systems/overview', {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+};
+
+export interface TeacherClass {
+  id: number;
+  name: string;
+  code: string;
+  description?: string | null;
+  semester: string;
+  status: 'active' | 'archived' | 'upcoming';
+  max_students: number;
+  student_count: number;
+  deployments_count: number;
+  created_at: string;
+}
+
+export interface TeacherClassCreate {
+  name: string;
+  code: string;
+  description?: string;
+  semester: string;
+  max_students: number;
+}
+
+export const classesApi = {
+  listTeacherClasses: () =>
+    request<TeacherClass[]>('/classes/teacher', {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+  createTeacherClass: (payload: TeacherClassCreate) =>
+    request<TeacherClass>('/classes/teacher', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(payload),
+    }),
+};
+
+export interface LoadTestProfile {
+  name: 'easy' | 'medium' | 'heavy';
+  label: string;
+  total_requests: number;
+  concurrency: number;
+  duration_seconds: number;
+}
+
+export const loadTestApi = {
+  listProfiles: () =>
+    request<LoadTestProfile[]>('/loadtest/profiles', {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+};
+
 // Export API base URL for components that need it directly
 export { API_BASE };
 

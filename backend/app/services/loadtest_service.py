@@ -220,10 +220,8 @@ class LoadTestService:
                 container = db.query(Container).filter(Container.id == test.container_id).first()
 
                 if container and container.deployment_type == "simulated":
-                    import random
-
-                    cpu_percent = random.uniform(3, 15)
-                    memory_mb = random.uniform(100, 300)
+                    cpu_percent = 0.0
+                    memory_mb = 0.0
                 elif container and container.container_id:
                     try:
                         stats = await self.docker_service.get_container_stats_async(container.container_id)

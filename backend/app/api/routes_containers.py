@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import Optional
 from datetime import datetime, timezone
 import logging
@@ -20,6 +21,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/containers", tags=["containers"])
 
 HTTP_PORT_HINTS = {80, 81, 3000, 3001, 4000, 5000, 5173, 8000, 8080, 8081, 8888, 9000}
+
+
+def _role_value(user: User) -> str:
+    return user.role.value if hasattr(user.role, "value") else str(user.role)
+
+
+def _can_access_container(current_user: User, container: Container, db: Session) -> bool:
+    """RBAC guard: admin all, teacher own+student, student own only."""
+    role = _role_value(current_user)
+
+    if role == UserRole.admin.value:
+        return True
+
+    if container.user_id == current_user.id:
+        return True
+
+    if role == UserRole.student.value:
+        return False
+
+    # Teacher can access student-owned containers, but not other teachers/admin containers.
+    owner = db.query(User.id, User.role).filter(User.id == container.user_id).first()
+    if not owner:
+        return False
+
+    owner_role = owner.role.value if hasattr(owner.role, "value") else str(owner.role)
+    return owner_role == UserRole.student.value
 
 
 def find_available_port(db: Session, start_port: int = 3000) -> int:
@@ -420,14 +447,21 @@ def list_containers(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List containers. Students see only their own, teachers/admins see all."""
+    """List containers with RBAC filtering by role."""
     
     query = db.query(Container)
     
-    # Role-based filtering
-    if current_user.role == UserRole.student:
+    role = _role_value(current_user)
+    if role == UserRole.student.value:
         query = query.filter(Container.user_id == current_user.id)
-    # Teachers and admins can see all containers
+    elif role == UserRole.teacher.value:
+        student_ids = db.query(User.id).filter(User.role == UserRole.student)
+        query = query.filter(
+            or_(
+                Container.user_id == current_user.id,
+                Container.user_id.in_(student_ids),
+            )
+        )
     
     # Status filtering
     if status_filter:
@@ -473,8 +507,8 @@ def get_container(
             detail="Container not found",
         )
     
-    # Check ownership (students can only see their own)
-    if current_user.role == UserRole.student and container.user_id != current_user.id:
+    # Check RBAC ownership
+    if not _can_access_container(current_user, container, db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this container",
@@ -504,8 +538,8 @@ def start_container(
             detail="Container not found",
         )
     
-    # Check ownership (students can only manage their own)
-    if current_user.role == UserRole.student and container.user_id != current_user.id:
+    # Check RBAC ownership
+    if not _can_access_container(current_user, container, db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to manage this container",
@@ -585,8 +619,8 @@ def stop_container(
             detail="Container not found",
         )
     
-    # Check ownership
-    if current_user.role == UserRole.student and container.user_id != current_user.id:
+    # Check RBAC ownership
+    if not _can_access_container(current_user, container, db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to manage this container",
@@ -646,8 +680,8 @@ def delete_container(
             detail="Container not found",
         )
     
-    # Check ownership
-    if current_user.role == UserRole.student and container.user_id != current_user.id:
+    # Check RBAC ownership
+    if not _can_access_container(current_user, container, db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to delete this container",
@@ -725,8 +759,8 @@ def get_container_logs(
             detail="Container not found",
         )
     
-    # Check ownership
-    if current_user.role == UserRole.student and container.user_id != current_user.id:
+    # Check RBAC ownership
+    if not _can_access_container(current_user, container, db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to view logs for this container",
