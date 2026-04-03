@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { api, loadTestApi, type LoadTestProfile } from '../utils/api'
+import { api, loadTestApi, type LoadTestProfile, API_BASE } from '../utils/api'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 
 interface Container {
@@ -70,7 +70,6 @@ const DEFAULT_PROFILES: LoadTestProfile[] = [
 ]
 
 export default function LoadTesting() {
-    const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://127.0.0.1:8001'
     const [containers, setContainers] = useState<Container[]>([])
     const [config, setConfig] = useState<LoadTestConfig>({
         containerId: null,

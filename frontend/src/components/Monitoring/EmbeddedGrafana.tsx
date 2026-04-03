@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { getGrafanaBaseUrl } from '../../utils/runtimeUrls'
 
 interface EmbeddedGrafanaProps {
     dashboardUid?: string
@@ -9,9 +10,6 @@ interface EmbeddedGrafanaProps {
     showControls?: boolean
 }
 
-// Default Grafana URL - can be overridden via environment variable
-const GRAFANA_URL = (import.meta as any).env?.VITE_GRAFANA_URL || 'http://localhost:3500'
-
 export default function EmbeddedGrafana({
     dashboardUid = 'intelliscale-embedded',
     panelId,
@@ -20,6 +18,7 @@ export default function EmbeddedGrafana({
     theme = 'light',
     showControls = true
 }: EmbeddedGrafanaProps) {
+    const GRAFANA_URL = getGrafanaBaseUrl()
     const [isLoading, setIsLoading] = useState(true)
     const [hasError, setHasError] = useState(false)
     const [isExpanded, setIsExpanded] = useState(false)
@@ -192,6 +191,7 @@ export function GrafanaPanel({
     title?: string
     height?: number
 }) {
+    const GRAFANA_URL = getGrafanaBaseUrl()
     const [isLoading, setIsLoading] = useState(true)
 
     const panelUrl = `${GRAFANA_URL}/d-solo/${dashboardUid}?orgId=1&panelId=${panelId}&refresh=5s&theme=light`

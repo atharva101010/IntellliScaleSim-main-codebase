@@ -329,7 +329,7 @@ class DockerService:
 
     def detect_internal_port(self, image_name: str, preferred_ports: Optional[list[int]] = None) -> Optional[int]:
         """Detect the best internal TCP port to bind based on image metadata."""
-        preferred = preferred_ports or [80, 8080, 3000, 5000, 8000, 8081]
+        preferred = preferred_ports or [80, 443, 8080, 3000, 5000, 9000, 9443, 8000, 8081]
         runtime = self.inspect_image_runtime(image_name)
         exposed_ports: list[int] = runtime.get("exposed_ports", [])
         if not exposed_ports:

@@ -1,16 +1,15 @@
 {
-    "dashboard": {
-        "title": "IntelliScaleSim Container Monitoring",
-        "tags": [
-            "containers",
-            "docker",
-            "monitoring"
-        ],
-        "timezone": "browser",
-        "schemaVersion": 16,
-        "version": 0,
-        "refresh": "5s",
-        "panels": [
+    "title": "IntelliScaleSim Container Monitoring",
+    "tags": [
+        "containers",
+        "docker",
+        "monitoring"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "5s",
+    "panels": [
             {
                 "id": 1,
                 "title": "Total Running Containers",
@@ -182,9 +181,8 @@
                 }
             }
         ],
-        "time": {
-            "from": "now-5m",
-            "to": "now"
-        }
+    "time": {
+        "from": "now-5m",
+        "to": "now"
     }
 }

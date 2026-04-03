@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { monitoring, ContainerStats, MonitoringOverview } from '../utils/api'
+import { monitoring, ContainerStats, MonitoringOverview, API_BASE } from '../utils/api'
 import EmbeddedGrafana from '../components/Monitoring/EmbeddedGrafana'
 import axios from 'axios'
+import { getGrafanaBaseUrl, getServiceBaseUrl } from '../utils/runtimeUrls'
 
 interface ScalingEvent {
     id: number
@@ -15,8 +16,6 @@ interface ScalingEvent {
     created_at: string
 }
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://127.0.0.1:8001'
-
 export default function Monitoring() {
     const [overview, setOverview] = useState<MonitoringOverview | null>(null)
     const [scalingEvents, setScalingEvents] = useState<ScalingEvent[]>([])
@@ -28,9 +27,7 @@ export default function Monitoring() {
 
     const fetchData = async () => {
         try {
-            console.log('Fetching monitoring data...')
             const data = await monitoring.getOverview()
-            console.log('Monitoring data received:', data)
             setOverview(data)
             setLastUpdate(new Date())
             setError(null)
@@ -125,7 +122,7 @@ export default function Monitoring() {
                         {showGrafana ? 'Hide Grafana' : 'Show Grafana'}
                     </button>
                     <a
-                        href="http://localhost:3500/d/intelliscale-embedded/intelliscalesim-embedded-dashboard?orgId=1&refresh=5s"
+                        href={`${getGrafanaBaseUrl()}/d/intelliscale-embedded/intelliscalesim-embedded-dashboard?orgId=1&refresh=5s`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white font-semibold rounded-lg shadow-sm hover:bg-slate-700 transition-all duration-200"
@@ -262,7 +259,7 @@ export default function Monitoring() {
                 <h3 className="text-lg font-bold text-slate-800 mb-4">Monitoring Resources</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <a
-                        href="http://localhost:9090"
+                        href={getServiceBaseUrl(9090)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-3 p-4 bg-white rounded-lg border border-slate-200 hover:border-slate-400 hover:shadow-md transition"
@@ -278,7 +275,7 @@ export default function Monitoring() {
                         </div>
                     </a>
                     <a
-                        href="http://localhost:3500"
+                        href={getGrafanaBaseUrl()}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-3 p-4 bg-white rounded-lg border border-slate-200 hover:border-slate-400 hover:shadow-md transition"
@@ -294,7 +291,7 @@ export default function Monitoring() {
                         </div>
                     </a>
                     <a
-                        href="http://localhost:8080"
+                        href={getServiceBaseUrl(8080)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-3 p-4 bg-white rounded-lg border border-slate-200 hover:border-slate-400 hover:shadow-md transition"

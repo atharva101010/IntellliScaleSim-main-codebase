@@ -11,6 +11,20 @@ from app.services.docker_service import DockerService
 logger = logging.getLogger(__name__)
 
 HTTP_PORT_HINTS = {80, 81, 3000, 3001, 4000, 5000, 5173, 8000, 8080, 8081, 8888, 9000}
+HTTPS_PORT_HINTS = {443, 8443, 9443}
+
+
+def _build_service_url(port: Optional[int], internal_port: Optional[int]) -> Optional[str]:
+    if not port or not internal_port:
+        return None
+
+    if internal_port in HTTPS_PORT_HINTS:
+        return f"https://localhost:{port}"
+
+    if internal_port in HTTP_PORT_HINTS:
+        return f"http://localhost:{port}"
+
+    return None
 
 
 class AutoScalerService:
@@ -249,11 +263,7 @@ class AutoScalerService:
                 cpu_limit=cpu_millicores,
                 memory_limit=mem_limit_mb,
                 environment_vars=parent.environment_vars,
-                localhost_url=(
-                    f"http://localhost:{run_port}"
-                    if run_port and internal_port in HTTP_PORT_HINTS
-                    else None
-                ),
+                localhost_url=_build_service_url(run_port, internal_port),
                 started_at=datetime.now(timezone.utc)
             )
             

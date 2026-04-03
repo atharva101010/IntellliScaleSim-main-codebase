@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import axios from 'axios'
+import { API_BASE } from '../utils/api'
 
 interface ScalingPolicy {
     id: number
@@ -55,8 +56,6 @@ export default function AutoScaling() {
         cooldown_period: 300,
         evaluation_period: 60
     })
-
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8001'
 
     const extractApiErrorMessage = (error: any): string => {
         const detail = error?.response?.data?.detail ?? error?.response?.data ?? error?.message

@@ -1,37 +1,4 @@
-// Determine API base URL robustly for both Docker, local dev, and GitHub Codespaces.
-// In Codespaces, each port gets its own subdomain (e.g., ...-5173.app.github.dev, ...-8000.app.github.dev)
-const envBase = (import.meta as any).env?.VITE_API_URL as string | undefined;
-
-function getApiBaseUrl(): string {
-  // If explicitly set via environment variable, use that
-  if (envBase) {
-    return envBase.replace(/\/$/, "");
-  }
-  
-  // Check if running in GitHub Codespaces
-  if (typeof window !== 'undefined' && window.location.hostname.includes('.app.github.dev')) {
-    // In Codespaces, replace the port in the subdomain (e.g., -5173 -> -8001)
-    const hostname = window.location.hostname;
-    const backendHostname = hostname.replace(/-\d+\.app\.github\.dev$/, '-8001.app.github.dev');
-    return `${window.location.protocol}//${backendHostname}`;
-  }
-  
-  // Local development
-  const isDev = typeof window !== 'undefined' && 
-    (window.location.port === '5173' || window.location.port === '5174' || 
-     window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  
-  if (isDev) {
-    return 'http://127.0.0.1:8001';
-  }
-  
-  // Fallback: infer from current location
-  const inferred = (typeof window !== 'undefined')
-    ? `${window.location.protocol}//${window.location.hostname}:8001`
-    : 'http://127.0.0.1:8001';
-  
-  return inferred;
-}
+import { getApiBaseUrl } from './runtimeUrls';
 
 const API_BASE = getApiBaseUrl();
 

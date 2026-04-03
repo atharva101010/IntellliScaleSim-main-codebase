@@ -21,6 +21,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/containers", tags=["containers"])
 
 HTTP_PORT_HINTS = {80, 81, 3000, 3001, 4000, 5000, 5173, 8000, 8080, 8081, 8888, 9000}
+HTTPS_PORT_HINTS = {443, 8443, 9443}
+
+
+def _build_service_url(port: Optional[int], internal_port: Optional[int]) -> Optional[str]:
+    if not port or not internal_port:
+        return None
+
+    if internal_port in HTTPS_PORT_HINTS:
+        return f"https://localhost:{port}"
+
+    if internal_port in HTTP_PORT_HINTS:
+        return f"http://localhost:{port}"
+
+    return None
 
 
 def _role_value(user: User) -> str:
@@ -273,11 +287,7 @@ def deploy_container(
             container.status = ContainerStatus.running
             container.started_at = datetime.now(timezone.utc)
             container.port = run_port
-            container.localhost_url = (
-                f"http://localhost:{run_port}"
-                if run_port and internal_port in HTTP_PORT_HINTS
-                else None
-            )
+            container.localhost_url = _build_service_url(run_port, internal_port)
             
             logger.info(f"Container deployed successfully: {container.name} at {container.localhost_url}")
             
@@ -355,22 +365,41 @@ def deploy_container(
                 
                 # Detect internal port from Dockerfile EXPOSE directive
                 internal_port = git_service.parse_dockerfile_expose(dockerfile_path)
+                
+                # If no EXPOSE in Dockerfile, try detecting from built image metadata
                 if not internal_port:
-                    # Fallback to common web app default when EXPOSE is missing
-                    internal_port = 80
-                    logger.info(f"Using fallback internal port: {internal_port}")
+                    internal_port = docker_service.detect_internal_port(image_tag)
+                
+                # If user provided a port and we still don't have one, use it
+                if not internal_port and payload.port:
+                    internal_port = payload.port
+                    logger.info(f"Using user-provided port {internal_port} as internal port")
+                
+                # Determine port mapping and keepalive command
+                run_port = assigned_port if internal_port else None
+                keepalive_command = None
+                
+                # Apply keepalive for base images without services
+                if internal_port is None and docker_service.should_use_keepalive_command(image_tag):
+                    keepalive_command = ["sh", "-c", "while true; do sleep 3600; done"]
+                    logger.info(f"Applying keepalive command for base image to prevent immediate exit")
                 
                 logger.info(f"Running container: {container.name}")
-                logger.info(f"Port mapping: {assigned_port} (external) -> {internal_port} (internal)")
+                if run_port and internal_port:
+                    logger.info(f"Port mapping: {run_port} (external) -> {internal_port} (internal)")
+                else:
+                    logger.info(f"No exposed service port detected; container will run without host port mapping")
+                
                 # Run container
                 docker_container_id = docker_service.run_container(
                     image=image_tag,
                     name=f"intelliscale-{container.id}-{container.name}",
-                    port=assigned_port,
+                    port=run_port,
                     internal_port=internal_port,
                     cpu_limit=str(payload.cpu_limit / 1000),
                     mem_limit=f"{payload.memory_limit}m",
                     env_vars=payload.environment_vars or {},
+                    command=keepalive_command,
                 )
 
                 runtime_status = docker_service.wait_for_container_running(docker_container_id, timeout_seconds=8)
@@ -388,11 +417,7 @@ def deploy_container(
                 container.container_id = docker_container_id
                 container.status = ContainerStatus.running
                 container.started_at = datetime.now(timezone.utc)
-                container.localhost_url = (
-                    f"http://localhost:{assigned_port}"
-                    if internal_port in HTTP_PORT_HINTS
-                    else None
-                )
+                container.localhost_url = _build_service_url(assigned_port, internal_port)
                 
                 logger.info(f"GitHub deployment successful: {container.name} at {container.localhost_url}")
                 

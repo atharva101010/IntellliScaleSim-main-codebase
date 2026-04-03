@@ -251,6 +251,7 @@ export default function DockerHubBrowser({
             <div className="border-b border-slate-200">
                 <div className="flex gap-1 px-4 pt-3">
                     <button
+                        type="button"
                         onClick={() => { setView('popular'); fetchPopular(selectedCategory || undefined) }}
                         className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
                             view === 'popular' 
@@ -261,6 +262,7 @@ export default function DockerHubBrowser({
                         Popular Images
                     </button>
                     <button
+                        type="button"
                         onClick={handleExploreCatalog}
                         className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
                             view === 'search' && submittedQuery === CATALOG_SEED_QUERY 
@@ -272,6 +274,7 @@ export default function DockerHubBrowser({
                     </button>
                     {hasCredentials && (
                         <button
+                            type="button"
                             onClick={showMyImages}
                             className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
                                 view === 'my-images' 
@@ -307,6 +310,7 @@ export default function DockerHubBrowser({
                         />
                     </div>
                     <button
+                        type="button"
                         onClick={handleSearch}
                         className="px-5 py-2.5 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-700 transition flex items-center gap-2"
                     >

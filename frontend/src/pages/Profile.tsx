@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { API_BASE } from '../utils/api'
 
 interface UserProfile {
     id: number
@@ -23,8 +24,6 @@ interface Preferences {
     notifications_enabled: boolean
     dashboard_refresh_rate: number
 }
-
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://127.0.0.1:8001'
 
 export default function Profile() {
     const { user, token } = useAuth()

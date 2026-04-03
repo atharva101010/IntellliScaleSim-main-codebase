@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { api, DeployContainerRequest } from '../../utils/api'
+import { api, DeployContainerRequest, API_BASE } from '../../utils/api'
 import { useAuth } from '../../hooks/useAuth'
 import DockerHubBrowser from './DockerHubBrowser'
 
@@ -43,7 +43,6 @@ const INITIAL_FORM_DATA: DeployContainerRequest = {
 
 export default function DeployModal({ isOpen, onClose, onSuccess }: DeployModalProps) {
     const { user } = useAuth()
-    const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://127.0.0.1:8001'
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [localImages, setLocalImages] = useState<string[]>([])

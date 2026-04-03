@@ -1,5 +1,6 @@
 import { Container } from '../../utils/api'
 import { formatDistanceToNow } from 'date-fns'
+import { getReachableServiceUrl } from '../../utils/runtimeUrls'
 
 interface ContainerCardProps {
     container: Container
@@ -23,6 +24,8 @@ export default function ContainerCard({
     onDelete,
     onViewDetails,
 }: ContainerCardProps) {
+    const serviceUrl = getReachableServiceUrl(container.public_url || container.localhost_url, container.port || undefined)
+
     const getRelativeTime = (dateStr: string) => {
         try {
             return formatDistanceToNow(new Date(dateStr), { addSuffix: true })
@@ -50,16 +53,16 @@ export default function ContainerCard({
                         <span className="font-semibold text-slate-900">{container.port}</span>
                     </div>
                 )}
-                {container.localhost_url && (
+                {serviceUrl && (
                     <div className="flex items-center justify-between text-sm">
                         <span className="text-slate-600">URL:</span>
                         <a
-                            href={container.localhost_url}
+                            href={serviceUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="font-semibold text-slate-800 hover:text-slate-900 hover:underline"
                         >
-                            {container.localhost_url}
+                            {serviceUrl}
                         </a>
                     </div>
                 )}
