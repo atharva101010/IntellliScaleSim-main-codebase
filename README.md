@@ -238,8 +238,11 @@ cp .env.example .env
 # Optional: use Docker PostgreSQL from host (avoids local Postgres 5432 conflicts)
 # DATABASE_URL=postgresql://intelliscale:intelliscale_secret_2024@127.0.0.1:5433/intelliscale_db
 
-# Start the server
-uvicorn app.main:app --reload --port 8001
+# Start the server (required for Prometheus/Grafana scraping)
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+
+# Recommended from repo root:
+./scripts/start_backend.sh
 ```
 
 ### Frontend Setup
@@ -580,7 +583,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your GROQ_API_KEY
 
-uvicorn app.main:app --reload --port 8001
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
 **Terminal 2 - Frontend:**
@@ -600,7 +603,7 @@ docker-compose -f docker-compose.monitoring.yml up -d
 
 ```bash
 # Start backend with auto-reload
-cd backend && uvicorn app.main:app --reload --port 8001
+cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 
 # In another terminal, start frontend with hot reload
 cd frontend && npm run dev
@@ -620,7 +623,7 @@ docker-compose -f docker-compose.monitoring.yml up -d
 
 | Issue | Solution |
 |-------|----------|
-| Port 8001 in use | Change port: `uvicorn app.main:app --port 8002` |
+| Port 8001 in use | Change port: `uvicorn app.main:app --host 0.0.0.0 --port 8002` |
 | Docker not running | Start Docker Desktop |
 | GROQ_API_KEY missing | Add key to backend/.env |
 | Containers not showing | Ensure Docker Desktop is running |

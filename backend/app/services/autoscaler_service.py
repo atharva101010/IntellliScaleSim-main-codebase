@@ -33,9 +33,41 @@ class AutoScalerService:
     Evaluates policies and makes scaling decisions
     """
     
+    _policy_state: dict[int, dict] = {}
+    _scale_up_streak_required = 2
+    _scale_down_streak_required = 3
+
     def __init__(self, db: Session, docker_service: DockerService):
         self.db = db
         self.docker_service = docker_service
+
+    @classmethod
+    def _state_for_policy(cls, policy_id: int) -> dict:
+        return cls._policy_state.setdefault(
+            policy_id,
+            {
+                "last_evaluated_at": None,
+                "scale_up_streak": 0,
+                "scale_down_streak": 0,
+            },
+        )
+
+    @classmethod
+    def _is_evaluation_due(cls, policy: ScalingPolicy) -> bool:
+        state = cls._state_for_policy(policy.id)
+        now = datetime.now(timezone.utc)
+        last_eval = state.get("last_evaluated_at")
+
+        if last_eval is None:
+            state["last_evaluated_at"] = now
+            return True
+
+        seconds_since_last = (now - last_eval).total_seconds()
+        if seconds_since_last >= max(policy.evaluation_period, 10):
+            state["last_evaluated_at"] = now
+            return True
+
+        return False
 
     def _cleanup_stale_policy_reference(
         self,
@@ -349,6 +381,12 @@ class AutoScalerService:
     async def evaluate_policy(self, policy: ScalingPolicy) -> None:
         """Evaluate a single policy and take action if needed"""
         try:
+            if not self._is_evaluation_due(policy):
+                logger.debug(
+                    f"Skipping policy {policy.id}: waiting for evaluation_period={policy.evaluation_period}s"
+                )
+                return
+
             container = self.db.query(Container).filter(Container.id == policy.container_id).first()
             if not container:
                 self._cleanup_stale_policy_reference(policy, None, "container_record_missing")
@@ -380,21 +418,46 @@ class AutoScalerService:
             logger.info(f"📊 Policy {policy.id} Evaluation: Container {policy.container_id} | CPU: {cpu_val}% (Target: {policy.scale_up_cpu_threshold}%) | Mem: {mem_val}%")
             
             current_replicas = self.get_current_replica_count(policy.container_id)
+            state = self._state_for_policy(policy.id)
             
             # Check if should scale up
             should_scale_up, reason = self.should_scale_up(policy, metrics, current_replicas)
             if should_scale_up:
+                state["scale_up_streak"] = int(state.get("scale_up_streak", 0)) + 1
+                state["scale_down_streak"] = 0
+
+                if state["scale_up_streak"] < self._scale_up_streak_required:
+                    logger.info(
+                        f"Policy {policy.id} scale-up streak {state['scale_up_streak']}/{self._scale_up_streak_required}; waiting for stabilization"
+                    )
+                    return
+
                 metric_key = f"{reason}_percent"
                 logger.info(f"Scaling up container {policy.container_id} due to {reason}: {metrics[metric_key]}%")
                 self.scale_up(policy, reason, metrics[metric_key])
+                state["scale_up_streak"] = 0
+                state["scale_down_streak"] = 0
                 return
+            else:
+                state["scale_up_streak"] = 0
             
             # Check if should scale down
             should_scale_down, reason = self.should_scale_down(policy, metrics, current_replicas)
             if should_scale_down:
+                state["scale_down_streak"] = int(state.get("scale_down_streak", 0)) + 1
+
+                if state["scale_down_streak"] < self._scale_down_streak_required:
+                    logger.info(
+                        f"Policy {policy.id} scale-down streak {state['scale_down_streak']}/{self._scale_down_streak_required}; waiting for stabilization"
+                    )
+                    return
+
                 logger.info(f"Scaling down container {policy.container_id} due to low resource usage")
                 self.scale_down(policy, "both_low", min(metrics['cpu_percent'], metrics['memory_percent']))
+                state["scale_down_streak"] = 0
                 return
+
+            state["scale_down_streak"] = 0
             
             logger.debug(f"No scaling action needed for container {policy.container_id}")
             

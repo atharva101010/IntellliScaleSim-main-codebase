@@ -95,7 +95,7 @@
       "pluginVersion": "10.2.2",
       "targets": [
         {
-          "expr": "avg(container_memory_usage_percent)",
+          "expr": "avg((container_memory_usage_bytes / container_memory_limit_bytes) * 100)",
           "legendFormat": "Memory",
           "refId": "A"
         }
@@ -296,7 +296,7 @@
       "pluginVersion": "10.2.2",
       "targets": [
         {
-          "expr": "container_memory_usage_mb",
+          "expr": "container_memory_usage_bytes / 1024 / 1024",
           "legendFormat": "{{container_name}}",
           "refId": "A"
         }

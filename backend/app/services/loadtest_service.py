@@ -134,9 +134,13 @@ class LoadTestService:
         metrics_task = asyncio.create_task(self._collect_metrics(test, results, start_time, db))
 
         worker_count = max(1, min(test.concurrency, test.total_requests, 500))
-        work_queue: asyncio.Queue[int] = asyncio.Queue()
+        work_queue: asyncio.Queue[tuple[int, float]] = asyncio.Queue()
+        request_interval = test.duration_seconds / max(test.total_requests, 1)
         for request_num in range(test.total_requests):
-            work_queue.put_nowait(request_num)
+            scheduled_offset = request_num * request_interval
+            work_queue.put_nowait((request_num, scheduled_offset))
+
+        test_start_monotonic = time.monotonic()
 
         request_timeout_seconds = min(max(test.duration_seconds / 4, 2.0), 15.0)
         connection_limit = min(max(worker_count * 2, 100), 1000)
@@ -151,7 +155,12 @@ class LoadTestService:
                 ),
             ) as client:
 
-                async def send_request():
+                async def send_request(scheduled_offset: float):
+                    target_time = test_start_monotonic + scheduled_offset
+                    sleep_for = target_time - time.monotonic()
+                    if sleep_for > 0:
+                        await asyncio.sleep(sleep_for)
+
                     if time.monotonic() >= stop_at:
                         return
 
@@ -183,12 +192,12 @@ class LoadTestService:
                 async def worker():
                     while time.monotonic() < stop_at:
                         try:
-                            work_queue.get_nowait()
+                            _, scheduled_offset = work_queue.get_nowait()
                         except asyncio.QueueEmpty:
                             return
 
                         try:
-                            await send_request()
+                            await send_request(scheduled_offset)
                         finally:
                             work_queue.task_done()
 
