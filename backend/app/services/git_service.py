@@ -42,9 +42,9 @@ class GitService:
         try:
             # Add token to URL if provided (for private repos)
             if token:
-                # Format: https://token@github.com/user/repo.git
+                # Format: https://x-access-token:TOKEN@github.com/user/repo.git
                 if "https://" in repo_url:
-                    clone_url = repo_url.replace("https://", f"https://{token}@")
+                    clone_url = repo_url.replace("https://", f"https://x-access-token:{token}@")
                 else:
                     clone_url = repo_url
             else:
@@ -65,8 +65,28 @@ class GitService:
         except subprocess.CalledProcessError as e:
             # Cleanup on failure
             shutil.rmtree(temp_dir, ignore_errors=True)
-            logger.error(f"Failed to clone repository: {e.stderr}")
-            raise Exception(f"Failed to clone repository: {e.stderr}")
+            stderr = (e.stderr or "").strip()
+            combined_output = f"{stderr}\n{e.stdout or ''}".lower()
+
+            private_repo_signals = [
+                "repository not found",
+                "could not read username",
+                "authentication failed",
+                "permission denied",
+                "access denied",
+                "fatal: unable to access",
+            ]
+
+            if any(signal in combined_output for signal in private_repo_signals):
+                logger.error(f"Private or inaccessible repository: {stderr}")
+                raise Exception(
+                    "GitHub repository is private or inaccessible. Please provide a valid GitHub access token with repo access permissions."
+                )
+
+            logger.error(f"Failed to clone repository: {stderr}")
+            raise Exception(
+                f"Failed to clone repository: {stderr or 'Unknown git error'}"
+            )
     
     def find_dockerfile(
         self, 

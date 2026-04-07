@@ -8,6 +8,7 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const bgClass = isAuth
     ? 'bg-rose-50'
     : 'bg-gradient-to-br from-slate-50 via-white to-slate-100'
+
   const mainBase = "w-full"
   const mainLayout = isAuth ? `${mainBase} max-w-6xl mx-auto min-h-[calc(100vh-56px)] grid place-items-center px-4 sm:px-6 lg:px-8` : `${mainBase}`
   return (

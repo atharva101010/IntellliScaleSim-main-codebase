@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, Users, BookOpen, Calendar, Search, Trash2, Edit2, Eye } from 'lucide-react'
+import { Plus, Users, BookOpen, Calendar, Search, Trash2, Edit2, Eye, X, Check } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { classesApi, type TeacherClass } from '@/utils/api'
+import { classesApi, type TeacherClass, type ClassroomStudent } from '@/utils/api'
 
 interface ClassItem {
   id: number
@@ -55,6 +55,13 @@ export default function Classes() {
   })
   const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [showStudentModal, setShowStudentModal] = useState(false)
+  const [enrolledStudents, setEnrolledStudents] = useState<ClassroomStudent[]>([])
+  const [availableStudents, setAvailableStudents] = useState<ClassroomStudent[]>([])
+  const [studentModalLoading, setStudentModalLoading] = useState(false)
+  const [studentModalError, setStudentModalError] = useState<string | null>(null)
+  const [enrollingStudentId, setEnrollingStudentId] = useState<number | null>(null)
+  const [removingStudentId, setRemovingStudentId] = useState<number | null>(null)
 
   const loadClasses = async () => {
     setLoading(true)
@@ -67,6 +74,56 @@ export default function Classes() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const loadStudents = async (classId: number) => {
+    setStudentModalLoading(true)
+    setStudentModalError(null)
+    try {
+      const [enrolled, available] = await Promise.all([
+        classesApi.getClassStudents(classId),
+        classesApi.getAvailableStudents(classId),
+      ])
+      setEnrolledStudents(enrolled)
+      setAvailableStudents(available)
+    } catch (err: any) {
+      setStudentModalError(err?.message || 'Failed to load students')
+    } finally {
+      setStudentModalLoading(false)
+    }
+  }
+
+  const handleEnrollStudent = async (classId: number, studentId: number) => {
+    setEnrollingStudentId(studentId)
+    try {
+      await classesApi.enrollStudent(classId, studentId)
+      await loadStudents(classId)
+      await loadClasses()
+    } catch (err: any) {
+      setStudentModalError(err?.message || 'Failed to enroll student')
+    } finally {
+      setEnrollingStudentId(null)
+    }
+  }
+
+  const handleRemoveStudent = async (classId: number, studentId: number) => {
+    setRemovingStudentId(studentId)
+    try {
+      await classesApi.removeStudent(classId, studentId)
+      await loadStudents(classId)
+      await loadClasses()
+    } catch (err: any) {
+      setStudentModalError(err?.message || 'Failed to remove student')
+    } finally {
+      setRemovingStudentId(null)
+    }
+  }
+
+  const handleOpenStudentModal = (classItem: ClassItem) => {
+    setSelectedClass(classItem)
+    setShowDetailsModal(false)
+    setShowStudentModal(true)
+    void loadStudents(classItem.id)
   }
 
   useEffect(() => {
@@ -436,9 +493,111 @@ export default function Classes() {
               <Button variant="outline" className="flex-1" onClick={() => setShowDetailsModal(false)}>
                 Close
               </Button>
-              <Button className="flex-1">
+              <Button className="flex-1" onClick={() => handleOpenStudentModal(selectedClass)}>
                 <Users className="h-4 w-4 mr-2" />
                 Manage Students
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Student Management Modal */}
+      {showStudentModal && selectedClass && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Manage Students</h2>
+                <p className="text-sm text-slate-500 mt-1">{selectedClass.name} ({selectedClass.code})</p>
+              </div>
+              <button
+                onClick={() => setShowStudentModal(false)}
+                className="text-slate-500 hover:text-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {studentModalError && (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {studentModalError}
+              </div>
+            )}
+
+            {studentModalLoading ? (
+              <div className="py-8 text-center">
+                <p className="text-slate-500">Loading students...</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Enrolled Students */}
+                <div>
+                  <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Enrolled Students ({enrolledStudents.length}/{selectedClass.maxStudents})
+                  </h3>
+                  {enrolledStudents.length > 0 ? (
+                    <div className="space-y-2">
+                      {enrolledStudents.map((student) => (
+                        <div key={student.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                          <div>
+                            <p className="font-medium text-slate-900">{student.name}</p>
+                            <p className="text-xs text-slate-500">{student.email}</p>
+                          </div>
+                          <button
+                            onClick={() => handleRemoveStudent(selectedClass.id, student.id)}
+                            disabled={removingStudentId === student.id}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 p-2 rounded"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500 py-4">No students enrolled yet</p>
+                  )}
+                </div>
+
+                {/* Available Students */}
+                <div className="border-t pt-6">
+                  <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <Plus className="h-4 w-4" />
+                    Available Students ({availableStudents.length})
+                  </h3>
+                  {availableStudents.length > 0 ? (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {availableStudents.map((student) => (
+                        <div key={student.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                          <div>
+                            <p className="font-medium text-slate-900">{student.name}</p>
+                            <p className="text-xs text-slate-500">{student.email}</p>
+                          </div>
+                          <button
+                            onClick={() => handleEnrollStudent(selectedClass.id, student.id)}
+                            disabled={enrollingStudentId === student.id}
+                            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white p-2 rounded"
+                          >
+                            <Check className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500 py-4">All students are already enrolled</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6 flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setShowStudentModal(false)}>
+                Done
               </Button>
             </div>
           </motion.div>

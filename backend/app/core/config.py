@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
     BACKEND_URL: str = "http://localhost:8001"
 
+    # Demo account seeding (non-production only)
+    SEED_DEMO_USER: bool = True
+    DEMO_USER_OVERWRITE: bool = True
+    DEMO_USER_NAME: str = "Demo User"
+    DEMO_USER_EMAIL: str = "demo@test.com"
+    DEMO_USER_PASSWORD: str = "Password123!"
+    DEMO_USER_ROLE: str = "admin"
+
     # Token expirations (minutes)
     VERIFY_TOKEN_MINUTES: int = 60 * 24  # 24h
     RESET_TOKEN_MINUTES: int = 30

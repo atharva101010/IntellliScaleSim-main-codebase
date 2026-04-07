@@ -118,7 +118,10 @@ export default function DeployModal({ isOpen, onClose, onSuccess }: DeployModalP
         } catch (err: any) {
             console.error('Deployment error:', err)
             const errorMsg = err?.message || 'Failed to deploy container'
-            setError(`Error: ${errorMsg}`)
+            const normalizedError = formData.deployment_type === 'github' && /private|inaccessible|repository not found|access token|permission denied|authentication failed|unable to access/i.test(errorMsg)
+                ? 'GitHub repository is private or inaccessible. Please provide a GitHub access token with repo permissions.'
+                : errorMsg
+            setError(`Error: ${normalizedError}`)
         } finally {
             setLoading(false)
         }
@@ -391,7 +394,7 @@ export default function DeployModal({ isOpen, onClose, onSuccess }: DeployModalP
                                     required
                                 />
                                 <p className="text-xs text-slate-500 mt-1">
-                                    Full GitHub repository URL (public or private)
+                                    Full GitHub repository URL (public or private). If the repo is private, provide a GitHub access token with repo permissions.
                                 </p>
                             </div>
 

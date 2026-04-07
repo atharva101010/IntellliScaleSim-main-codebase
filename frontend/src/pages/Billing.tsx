@@ -4,23 +4,31 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 
 type TabType = 'realtime' | 'scenario';
 type Provider = 'aws' | 'gcp' | 'azure';
+type BillingComparison = Partial<Record<Provider, RealTimeBillingResponse>>;
+type ScenarioComparison = Partial<Record<Provider, ScenarioSimulationResponse>>;
+
+const PROVIDERS: Provider[] = ['aws', 'gcp', 'azure'];
+const PROVIDER_LABELS: Record<Provider, string> = {
+    aws: 'AWS',
+    gcp: 'GCP',
+    azure: 'Azure',
+};
 
 const Billing: React.FC = () => {
     const [activeTab, setActiveTab] = useState<TabType>('realtime');
     const [containers, setContainers] = useState<Container[]>([]);
     const [selectedContainer, setSelectedContainer] = useState<number | null>(null);
-    const [provider, setProvider] = useState<Provider>('aws');
     const [timeInterval, setTimeInterval] = useState<number>(1);
-    const [billingData, setBillingData] = useState<RealTimeBillingResponse | null>(null);
+    const [billingComparison, setBillingComparison] = useState<BillingComparison>({});
     const [loadingBilling, setLoadingBilling] = useState(false);
 
     // Scenario State
-    const [cpuCores, setCpuCores] = useState<number>(2);
-    const [memoryGb, setMemoryGb] = useState<number>(4);
-    const [storageGb, setStorageGb] = useState<number>(20);
+    const [cpuCores, setCpuCores] = useState<number>(0);
+    const [memoryGb, setMemoryGb] = useState<number>(0);
+    const [storageGb, setStorageGb] = useState<number>(0);
     const [durationHours, setDurationHours] = useState<number>(24);
-    const [scenarioProvider, setScenarioProvider] = useState<Provider>('aws');
-    const [scenarioResult, setScenarioResult] = useState<ScenarioSimulationResponse | null>(null);
+    const [selectedScenarioContainer, setSelectedScenarioContainer] = useState<number | null>(null);
+    const [scenarioComparison, setScenarioComparison] = useState<ScenarioComparison>({});
     const [loadingScenario, setLoadingScenario] = useState(false);
 
     useEffect(() => {
@@ -35,24 +43,44 @@ const Billing: React.FC = () => {
             if (runningContainers.length > 0 && !selectedContainer) {
                 setSelectedContainer(runningContainers[0].id);
             }
+            if (runningContainers.length > 0 && !selectedScenarioContainer) {
+                const firstContainer = runningContainers[0];
+                setSelectedScenarioContainer(firstContainer.id);
+            }
         } catch (error) {
             console.error('Error loading containers:', error);
             setContainers([]);
         }
     };
 
+    const resetScenarioMetrics = () => {
+        setCpuCores(0);
+        setMemoryGb(0);
+        setStorageGb(0);
+    };
+
     const calculateRealTimeBilling = async () => {
         if (!selectedContainer) return;
         try {
             setLoadingBilling(true);
-            const response = await billing.calculateRealTimeBilling({
-                container_id: selectedContainer,
-                hours_back: timeInterval,
-                provider: provider
+            const responses = await Promise.all(
+                PROVIDERS.map((p) =>
+                    billing.calculateRealTimeBilling({
+                        container_id: selectedContainer,
+                        hours_back: timeInterval,
+                        provider: p,
+                    })
+                )
+            );
+
+            const comparison: BillingComparison = {};
+            responses.forEach((response, index) => {
+                if (response.success) {
+                    comparison[PROVIDERS[index]] = response.billing;
+                }
             });
-            if (response.success) {
-                setBillingData(response.billing);
-            }
+
+            setBillingComparison(comparison);
         } catch (error: any) {
             alert(error.response?.data?.detail || 'Failed to calculate billing');
         } finally {
@@ -61,22 +89,54 @@ const Billing: React.FC = () => {
     };
 
     const runScenarioSimulation = async () => {
+        if (!selectedScenarioContainer) return;
         setLoadingScenario(true);
         try {
-            const response = await billing.simulateScenario(
-                cpuCores,
-                memoryGb,
-                storageGb,
-                durationHours,
-                scenarioProvider
+            const responses = await Promise.all(
+                PROVIDERS.map((p) =>
+                    billing.simulateScenario(
+                        cpuCores,
+                        memoryGb,
+                        storageGb,
+                        durationHours,
+                        p
+                    )
+                )
             );
-            setScenarioResult(response.simulation);
+
+            const comparison: ScenarioComparison = {};
+            responses.forEach((response, index) => {
+                if (response.success) {
+                    comparison[PROVIDERS[index]] = response.simulation;
+                }
+            });
+
+            setScenarioComparison(comparison);
         } catch (error: any) {
             alert(error.response?.data?.detail || 'Failed to run simulation');
         } finally {
             setLoadingScenario(false);
         }
     };
+
+    const comparedProviders = PROVIDERS.filter((p) => billingComparison[p]);
+    const hasComparisonData = comparedProviders.length > 0;
+    const usageHistorySource = billingComparison.aws || billingComparison.gcp || billingComparison.azure || null;
+    const cheapestProvider = comparedProviders.reduce<Provider | null>((best, current) => {
+        if (!best) return current;
+        const bestTotal = billingComparison[best]?.costs.total_cost ?? Number.POSITIVE_INFINITY;
+        const currentTotal = billingComparison[current]?.costs.total_cost ?? Number.POSITIVE_INFINITY;
+        return currentTotal < bestTotal ? current : best;
+    }, null);
+    const comparedScenarioProviders = PROVIDERS.filter((p) => scenarioComparison[p]);
+    const hasScenarioComparisonData = comparedScenarioProviders.length > 0;
+    const scenarioSource = scenarioComparison.aws || scenarioComparison.gcp || scenarioComparison.azure || null;
+    const cheapestScenarioProvider = comparedScenarioProviders.reduce<Provider | null>((best, current) => {
+        if (!best) return current;
+        const bestTotal = scenarioComparison[best]?.costs.total_cost ?? Number.POSITIVE_INFINITY;
+        const currentTotal = scenarioComparison[current]?.costs.total_cost ?? Number.POSITIVE_INFINITY;
+        return currentTotal < bestTotal ? current : best;
+    }, null);
 
     return (
         <div className="space-y-6">
@@ -117,7 +177,7 @@ const Billing: React.FC = () => {
                         {/* Configuration Card */}
                         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
                             <h2 className="text-xl font-bold text-slate-900 mb-4">Configuration</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {/* Container Selector */}
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-2">Container</label>
@@ -133,26 +193,6 @@ const Billing: React.FC = () => {
                                             </option>
                                         ))}
                                     </select>
-                                </div>
-
-                                {/* Provider Selector */}
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Provider</label>
-                                    <div className="flex gap-2">
-                                        {(['aws', 'gcp', 'azure'] as Provider[]).map((p) => (
-                                            <button
-                                                key={p}
-                                                onClick={() => setProvider(p)}
-                                                className={`flex-1 py-2 rounded text-sm font-bold ${
-                                                    provider === p
-                                                        ? 'bg-slate-900 text-white'
-                                                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                                }`}
-                                            >
-                                                {p.toUpperCase()}
-                                            </button>
-                                        ))}
-                                    </div>
                                 </div>
 
                                 {/* Time Interval */}
@@ -182,42 +222,65 @@ const Billing: React.FC = () => {
                         </div>
 
                         {/* Results */}
-                        {billingData && (
+                        {hasComparisonData && (
                             <>
-                                {/* Cost Cards */}
-                                <div className="grid grid-cols-4 gap-4">
-                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 text-center">
-                                        <p className="text-sm text-slate-600 font-semibold">CPU Cost</p>
-                                        <p className="text-2xl font-bold text-violet-600 mt-1">
-                                            ${billingData.costs.cpu_cost.toFixed(4)}
-                                        </p>
-                                    </div>
-                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 text-center">
-                                        <p className="text-sm text-slate-600 font-semibold">Memory Cost</p>
-                                        <p className="text-2xl font-bold text-cyan-600 mt-1">
-                                            ${billingData.costs.memory_cost.toFixed(4)}
-                                        </p>
-                                    </div>
-                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 text-center">
-                                        <p className="text-sm text-slate-600 font-semibold">Storage Cost</p>
-                                        <p className="text-2xl font-bold text-amber-600 mt-1">
-                                            ${billingData.costs.storage_cost.toFixed(4)}
-                                        </p>
-                                    </div>
-                                    <div className="bg-white border-2 border-rose-500 rounded-xl shadow-sm p-4 text-center">
-                                        <p className="text-sm text-slate-600 font-semibold">Total Cost</p>
-                                        <p className="text-2xl font-bold text-pink-600 mt-1">
-                                            ${billingData.costs.total_cost.toFixed(4)}
-                                        </p>
-                                    </div>
+                                {/* Provider Comparison Cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {PROVIDERS.map((p) => {
+                                        const data = billingComparison[p];
+                                        if (!data) return null;
+                                        const isCheapest = cheapestProvider === p;
+
+                                        return (
+                                            <div
+                                                key={p}
+                                                className={`bg-white rounded-xl shadow-sm p-4 ${
+                                                    isCheapest ? 'border-2 border-emerald-500' : 'border border-slate-200'
+                                                }`}
+                                            >
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <p className="text-sm text-slate-600 font-semibold">{PROVIDER_LABELS[p]}</p>
+                                                    {isCheapest && (
+                                                        <span className="text-xs font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                                                            Lowest Cost
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-3xl font-bold text-slate-900">${data.costs.total_cost.toFixed(4)}</p>
+                                                <div className="mt-3 space-y-1 text-sm text-slate-600">
+                                                    <div className="flex justify-between">
+                                                        <span>CPU</span>
+                                                        <span className="font-semibold text-violet-600">${data.costs.cpu_cost.toFixed(4)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span>Memory</span>
+                                                        <span className="font-semibold text-cyan-600">${data.costs.memory_cost.toFixed(4)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span>Storage</span>
+                                                        <span className="font-semibold text-amber-600">${data.costs.storage_cost.toFixed(4)}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
+
+                                {/* Comparison Summary */}
+                                {cheapestProvider && (
+                                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl shadow-sm p-4">
+                                        <p className="text-sm font-semibold text-emerald-800">
+                                            Best price for this usage window: {PROVIDER_LABELS[cheapestProvider]} at ${billingComparison[cheapestProvider]?.costs.total_cost.toFixed(4)}
+                                        </p>
+                                    </div>
+                                )}
 
                                 {/* Usage Charts */}
                                 <div className="grid grid-cols-2 gap-6">
                                     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
                                         <h3 className="text-lg font-bold text-slate-900 mb-4">CPU Usage</h3>
                                         <ResponsiveContainer width="100%" height={250}>
-                                            <LineChart data={billingData.usage_history}>
+                                            <LineChart data={usageHistorySource?.usage_history || []}>
                                                 <CartesianGrid strokeDasharray="3 3" />
                                                 <XAxis
                                                     dataKey="timestamp"
@@ -238,7 +301,7 @@ const Billing: React.FC = () => {
                                     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
                                         <h3 className="text-lg font-bold text-slate-900 mb-4">Memory Usage</h3>
                                         <ResponsiveContainer width="100%" height={250}>
-                                            <LineChart data={billingData.usage_history}>
+                                            <LineChart data={usageHistorySource?.usage_history || []}>
                                                 <CartesianGrid strokeDasharray="3 3" />
                                                 <XAxis
                                                     dataKey="timestamp"
@@ -257,34 +320,70 @@ const Billing: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {/* Cost Breakdown */}
+                                {/* Cost Breakdown Comparison */}
                                 <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-                                    <h3 className="text-xl font-bold text-slate-900 mb-4">Cost Breakdown</h3>
-                                    <div className="space-y-3 text-sm">
-                                        <div className="flex justify-between py-2 border-b border-slate-200">
-                                            <span className="text-slate-700">CPU: {billingData.average_usage.cpu_cores.toFixed(3)} cores</span>
-                                            <span className="font-bold text-violet-600">${billingData.costs.cpu_cost.toFixed(4)}</span>
-                                        </div>
-                                        <div className="flex justify-between py-2 border-b border-slate-200">
-                                            <span className="text-slate-700">Memory: {billingData.average_usage.memory_gb.toFixed(3)} GB</span>
-                                            <span className="font-bold text-cyan-600">${billingData.costs.memory_cost.toFixed(4)}</span>
-                                        </div>
-                                        <div className="flex justify-between py-2 border-b border-slate-200">
-                                            <span className="text-slate-700">Storage: {billingData.average_usage.storage_gb.toFixed(2)} GB</span>
-                                            <span className="font-bold text-amber-600">${billingData.costs.storage_cost.toFixed(4)}</span>
-                                        </div>
-                                        <div className="flex justify-between py-2 text-lg font-bold">
-                                            <span className="text-slate-900">Total</span>
-                                            <span className="text-pink-600">${billingData.costs.total_cost.toFixed(4)}</span>
-                                        </div>
+                                    <h3 className="text-xl font-bold text-slate-900 mb-4">Cost Breakdown Comparison</h3>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr className="border-b border-slate-200 text-slate-600">
+                                                    <th className="text-left py-2 font-semibold">Metric</th>
+                                                    {PROVIDERS.map((p) => (
+                                                        <th key={p} className="text-right py-2 font-semibold">{PROVIDER_LABELS[p]}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr className="border-b border-slate-100">
+                                                    <td className="py-2 text-slate-700">CPU Cost</td>
+                                                    {PROVIDERS.map((p) => (
+                                                        <td key={p} className="text-right py-2 text-violet-600 font-semibold">
+                                                            ${billingComparison[p]?.costs.cpu_cost.toFixed(4) || '0.0000'}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                                <tr className="border-b border-slate-100">
+                                                    <td className="py-2 text-slate-700">Memory Cost</td>
+                                                    {PROVIDERS.map((p) => (
+                                                        <td key={p} className="text-right py-2 text-cyan-600 font-semibold">
+                                                            ${billingComparison[p]?.costs.memory_cost.toFixed(4) || '0.0000'}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                                <tr className="border-b border-slate-100">
+                                                    <td className="py-2 text-slate-700">Storage Cost</td>
+                                                    {PROVIDERS.map((p) => (
+                                                        <td key={p} className="text-right py-2 text-amber-600 font-semibold">
+                                                            ${billingComparison[p]?.costs.storage_cost.toFixed(4) || '0.0000'}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                                <tr>
+                                                    <td className="py-2 text-slate-900 font-bold">Total Cost</td>
+                                                    {PROVIDERS.map((p) => (
+                                                        <td key={p} className="text-right py-2 text-pink-600 font-bold">
+                                                            ${billingComparison[p]?.costs.total_cost.toFixed(4) || '0.0000'}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            </tbody>
+                                        </table>
                                     </div>
+
+                                    {usageHistorySource && (
+                                        <div className="mt-4 pt-4 border-t border-slate-200 text-sm text-slate-600">
+                                            <p>
+                                                Average usage for selected app: {usageHistorySource.average_usage.cpu_cores.toFixed(3)} CPU cores, {usageHistorySource.average_usage.memory_gb.toFixed(3)} GB memory, {usageHistorySource.average_usage.storage_gb.toFixed(2)} GB storage.
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         )}
 
-                        {!billingData && !loadingBilling && (
+                        {!hasComparisonData && !loadingBilling && (
                             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-12 text-center text-slate-500">
-                                <p>Select a container and click "Calculate Costs" to view billing data</p>
+                                <p>Select a container and click "Calculate Costs" to compare AWS, GCP, and Azure pricing</p>
                             </div>
                         )}
                     </div>
@@ -296,7 +395,40 @@ const Billing: React.FC = () => {
                         {/* Configuration Card */}
                         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
                             <h2 className="text-xl font-bold text-slate-900 mb-4">Scenario Configuration</h2>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Container</label>
+                                    <select
+                                        value={selectedScenarioContainer || ''}
+                                        onChange={(e) => {
+                                            const nextContainerId = Number(e.target.value);
+                                            setSelectedScenarioContainer(nextContainerId);
+                                            resetScenarioMetrics();
+                                            setScenarioComparison({});
+                                        }}
+                                        className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none transition"
+                                    >
+                                        <option value="">Select container...</option>
+                                        {containers.map((c) => (
+                                            <option key={c.id} value={c.id}>
+                                                Deploy {c.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Duration (hours)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="720"
+                                        value={durationHours}
+                                        onChange={(e) => setDurationHours(parseInt(e.target.value))}
+                                        className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none transition"
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-2">CPU Cores</label>
                                     <input
@@ -313,11 +445,11 @@ const Billing: React.FC = () => {
                                     <label className="block text-sm font-semibold text-slate-700 mb-2">Memory (GB)</label>
                                     <input
                                         type="number"
-                                        min="1"
+                                        min="0.5"
                                         max="64"
-                                        step="1"
+                                        step="0.5"
                                         value={memoryGb}
-                                        onChange={(e) => setMemoryGb(parseInt(e.target.value))}
+                                        onChange={(e) => setMemoryGb(parseFloat(e.target.value))}
                                         className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none transition"
                                     />
                                 </div>
@@ -327,57 +459,26 @@ const Billing: React.FC = () => {
                                         type="number"
                                         min="10"
                                         max="1000"
-                                        step="10"
+                                        step="1"
                                         value={storageGb}
                                         onChange={(e) => setStorageGb(parseInt(e.target.value))}
                                         className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none transition"
                                     />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Duration (hours)</label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        max="720"
-                                        value={durationHours}
-                                        onChange={(e) => setDurationHours(parseInt(e.target.value))}
-                                        className="w-full px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none transition"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Provider Selection */}
-                            <div className="mt-4">
-                                <label className="block text-sm font-semibold text-slate-700 mb-2">Provider</label>
-                                <div className="flex gap-2">
-                                    {(['aws', 'gcp', 'azure'] as Provider[]).map((p) => (
-                                        <button
-                                            key={p}
-                                            onClick={() => setScenarioProvider(p)}
-                                            className={`flex-1 py-2 rounded text-sm font-bold ${
-                                                scenarioProvider === p
-                                                    ? 'bg-slate-900 text-white'
-                                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                            }`}
-                                        >
-                                            {p.toUpperCase()}
-                                        </button>
-                                    ))}
                                 </div>
                             </div>
 
                             {/* Simulate Button */}
                             <button
                                 onClick={runScenarioSimulation}
-                                disabled={loadingScenario}
+                                disabled={loadingScenario || !selectedScenarioContainer}
                                 className="mt-4 w-full bg-slate-900 text-white py-3 rounded-lg font-bold hover:bg-slate-700 disabled:opacity-50 transition"
                             >
-                                {loadingScenario ? 'Simulating...' : 'Run Simulation'}
+                                {loadingScenario ? 'Simulating...' : 'Run Comparison'}
                             </button>
                         </div>
 
                         {/* Results */}
-                        {scenarioResult && (
+                        {hasScenarioComparisonData && (
                             <>
                                 {/* Configuration Summary */}
                                 <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
@@ -385,63 +486,129 @@ const Billing: React.FC = () => {
                                     <div className="grid grid-cols-4 gap-4 text-center text-sm">
                                         <div>
                                             <p className="text-slate-600 font-semibold">CPU</p>
-                                            <p className="text-2xl font-bold text-violet-600">{scenarioResult.scenario.cpu_cores}</p>
+                                            <p className="text-2xl font-bold text-violet-600">{scenarioSource?.scenario.cpu_cores}</p>
                                         </div>
                                         <div>
                                             <p className="text-slate-600 font-semibold">Memory</p>
-                                            <p className="text-2xl font-bold text-cyan-600">{scenarioResult.scenario.memory_gb} GB</p>
+                                            <p className="text-2xl font-bold text-cyan-600">{scenarioSource?.scenario.memory_gb} GB</p>
                                         </div>
                                         <div>
                                             <p className="text-slate-600 font-semibold">Storage</p>
-                                            <p className="text-2xl font-bold text-amber-600">{scenarioResult.scenario.storage_gb} GB</p>
+                                            <p className="text-2xl font-bold text-amber-600">{scenarioSource?.scenario.storage_gb} GB</p>
                                         </div>
                                         <div>
                                             <p className="text-slate-600 font-semibold">Duration</p>
-                                            <p className="text-2xl font-bold text-pink-600">{scenarioResult.scenario.duration_hours}h</p>
+                                            <p className="text-2xl font-bold text-pink-600">{scenarioSource?.scenario.duration_hours}h</p>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Cost Cards */}
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
-                                        <p className="text-sm text-slate-600 font-semibold">CPU Cost</p>
-                                        <p className="text-2xl font-bold text-violet-600 mt-2">
-                                            ${scenarioResult.cost_breakdown.cpu.cost.toFixed(4)}
-                                        </p>
-                                        <p className="text-xs text-slate-500 mt-1">{scenarioResult.cost_breakdown.cpu.usage}</p>
-                                    </div>
-                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
-                                        <p className="text-sm text-slate-600 font-semibold">Memory Cost</p>
-                                        <p className="text-2xl font-bold text-cyan-600 mt-2">
-                                            ${scenarioResult.cost_breakdown.memory.cost.toFixed(4)}
-                                        </p>
-                                        <p className="text-xs text-slate-500 mt-1">{scenarioResult.cost_breakdown.memory.usage}</p>
-                                    </div>
-                                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
-                                        <p className="text-sm text-slate-600 font-semibold">Storage Cost</p>
-                                        <p className="text-2xl font-bold text-amber-600 mt-2">
-                                            ${scenarioResult.cost_breakdown.storage.cost.toFixed(4)}
-                                        </p>
-                                        <p className="text-xs text-slate-500 mt-1">{scenarioResult.cost_breakdown.storage.usage}</p>
-                                    </div>
+                                {/* Provider Comparison Cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {PROVIDERS.map((p) => {
+                                        const data = scenarioComparison[p];
+                                        if (!data) return null;
+                                        const isCheapest = cheapestScenarioProvider === p;
+
+                                        return (
+                                            <div
+                                                key={p}
+                                                className={`bg-white rounded-xl shadow-sm p-4 ${
+                                                    isCheapest ? 'border-2 border-emerald-500' : 'border border-slate-200'
+                                                }`}
+                                            >
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <p className="text-sm text-slate-600 font-semibold">{PROVIDER_LABELS[p]}</p>
+                                                    {isCheapest && (
+                                                        <span className="text-xs font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                                                            Lowest Cost
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-3xl font-bold text-slate-900">${data.costs.total_cost.toFixed(4)}</p>
+                                                <div className="mt-3 space-y-1 text-sm text-slate-600">
+                                                    <div className="flex justify-between">
+                                                        <span>CPU</span>
+                                                        <span className="font-semibold text-violet-600">${data.cost_breakdown.cpu.cost.toFixed(4)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span>Memory</span>
+                                                        <span className="font-semibold text-cyan-600">${data.cost_breakdown.memory.cost.toFixed(4)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span>Storage</span>
+                                                        <span className="font-semibold text-amber-600">${data.cost_breakdown.storage.cost.toFixed(4)}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
 
-                                {/* Total */}
-                                <div className="bg-white rounded-xl shadow-sm p-6 border-2 border-rose-500">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-lg font-bold text-slate-900">Total Estimated Cost</span>
-                                        <span className="text-3xl font-bold text-pink-600">
-                                            ${scenarioResult.costs.total_cost.toFixed(4)}
-                                        </span>
+                                {cheapestScenarioProvider && (
+                                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl shadow-sm p-4">
+                                        <p className="text-sm font-semibold text-emerald-800">
+                                            Best simulation price: {PROVIDER_LABELS[cheapestScenarioProvider]} at ${scenarioComparison[cheapestScenarioProvider]?.costs.total_cost.toFixed(4)}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Cost Breakdown Comparison */}
+                                <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+                                    <h3 className="text-xl font-bold text-slate-900 mb-4">Cost Breakdown Comparison</h3>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr className="border-b border-slate-200 text-slate-600">
+                                                    <th className="text-left py-2 font-semibold">Metric</th>
+                                                    {PROVIDERS.map((p) => (
+                                                        <th key={p} className="text-right py-2 font-semibold">{PROVIDER_LABELS[p]}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr className="border-b border-slate-100">
+                                                    <td className="py-2 text-slate-700">CPU Cost</td>
+                                                    {PROVIDERS.map((p) => (
+                                                        <td key={p} className="text-right py-2 text-violet-600 font-semibold">
+                                                            ${scenarioComparison[p]?.cost_breakdown.cpu.cost.toFixed(4) || '0.0000'}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                                <tr className="border-b border-slate-100">
+                                                    <td className="py-2 text-slate-700">Memory Cost</td>
+                                                    {PROVIDERS.map((p) => (
+                                                        <td key={p} className="text-right py-2 text-cyan-600 font-semibold">
+                                                            ${scenarioComparison[p]?.cost_breakdown.memory.cost.toFixed(4) || '0.0000'}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                                <tr className="border-b border-slate-100">
+                                                    <td className="py-2 text-slate-700">Storage Cost</td>
+                                                    {PROVIDERS.map((p) => (
+                                                        <td key={p} className="text-right py-2 text-amber-600 font-semibold">
+                                                            ${scenarioComparison[p]?.cost_breakdown.storage.cost.toFixed(4) || '0.0000'}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                                <tr>
+                                                    <td className="py-2 text-slate-900 font-bold">Total Cost</td>
+                                                    {PROVIDERS.map((p) => (
+                                                        <td key={p} className="text-right py-2 text-pink-600 font-bold">
+                                                            ${scenarioComparison[p]?.costs.total_cost.toFixed(4) || '0.0000'}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             </>
                         )}
 
-                        {!scenarioResult && !loadingScenario && (
+                        {!hasScenarioComparisonData && !loadingScenario && (
                             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-12 text-center text-slate-500">
-                                <p>Configure resources and click "Run Simulation" to see cost estimates</p>
+                                <p>Select a container and click "Run Comparison" to compare scenario pricing across AWS, GCP, and Azure</p>
                             </div>
                         )}
                     </div>

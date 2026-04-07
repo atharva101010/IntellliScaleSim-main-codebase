@@ -20,7 +20,6 @@ interface ProfileStats {
 }
 
 interface Preferences {
-    theme: 'light' | 'dark' | 'system'
     notifications_enabled: boolean
     dashboard_refresh_rate: number
 }
@@ -48,10 +47,16 @@ export default function Profile() {
     // Preferences (stored locally)
     const [preferences, setPreferences] = useState<Preferences>(() => {
         const saved = localStorage.getItem('user_preferences')
-        return saved ? JSON.parse(saved) : {
-            theme: 'light',
+        if (saved) {
+            const parsed = JSON.parse(saved)
+            return {
+                notifications_enabled: parsed.notifications_enabled ?? true,
+                dashboard_refresh_rate: parsed.dashboard_refresh_rate ?? 5,
+            }
+        }
+        return {
             notifications_enabled: true,
-            dashboard_refresh_rate: 5
+            dashboard_refresh_rate: 5,
         }
     })
 
@@ -62,12 +67,6 @@ export default function Profile() {
 
     useEffect(() => {
         localStorage.setItem('user_preferences', JSON.stringify(preferences))
-        // Apply theme
-        if (preferences.theme === 'dark') {
-            document.documentElement.classList.add('dark')
-        } else {
-            document.documentElement.classList.remove('dark')
-        }
     }, [preferences])
 
     const fetchProfile = async () => {
@@ -419,23 +418,6 @@ export default function Profile() {
                 <p className="text-sm text-slate-600 mb-4">Customize your dashboard experience</p>
 
                 <div className="space-y-4">
-                    {/* Theme Selection */}
-                    <div className="flex items-center justify-between py-3 border-b border-slate-100">
-                        <div>
-                            <p className="font-medium text-slate-900">Theme</p>
-                            <p className="text-sm text-slate-500">Choose your preferred color scheme</p>
-                        </div>
-                        <select
-                            value={preferences.theme}
-                            onChange={(e) => setPreferences({ ...preferences, theme: e.target.value as 'light' | 'dark' | 'system' })}
-                            className="px-3 py-2 border border-slate-300 rounded-lg focus:border-slate-900 focus:ring-2 focus:ring-slate-500/20 outline-none"
-                        >
-                            <option value="light">Light</option>
-                            <option value="dark">Dark</option>
-                            <option value="system">System</option>
-                        </select>
-                    </div>
-
                     {/* Notifications */}
                     <div className="flex items-center justify-between py-3 border-b border-slate-100">
                         <div>

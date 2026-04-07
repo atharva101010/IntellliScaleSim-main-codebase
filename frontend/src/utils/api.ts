@@ -461,6 +461,17 @@ export interface TeacherClassCreate {
   max_students: number;
 }
 
+export interface ClassroomStudent {
+  id: number;
+  name: string;
+  email: string;
+  enrolled_at: string | null;
+}
+
+export interface ClassroomEnrollmentAction {
+  message: string;
+}
+
 export const classesApi = {
   listTeacherClasses: () =>
     request<TeacherClass[]>('/classes/teacher', {
@@ -472,6 +483,26 @@ export const classesApi = {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify(payload),
+    }),
+  getClassStudents: (classroomId: number) =>
+    request<ClassroomStudent[]>(`/classes/teacher/${classroomId}/students`, {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+  getAvailableStudents: (classroomId: number) =>
+    request<ClassroomStudent[]>(`/classes/teacher/${classroomId}/available-students`, {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+  enrollStudent: (classroomId: number, studentId: number) =>
+    request<ClassroomEnrollmentAction>(`/classes/teacher/${classroomId}/students/${studentId}`, {
+      method: 'POST',
+      headers: authHeaders(),
+    }),
+  removeStudent: (classroomId: number, studentId: number) =>
+    request<ClassroomEnrollmentAction>(`/classes/teacher/${classroomId}/students/${studentId}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
     }),
 };
 

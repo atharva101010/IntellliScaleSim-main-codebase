@@ -19,8 +19,7 @@ export default function Register() {
     setError(null)
     try {
       await register(name, email, password, role)
-      // Redirect to verify email info page
-      nav(`/verify-email?email=${encodeURIComponent(email)}&sent=1`)
+      nav('/login?registered=1')
     } catch (err: any) {
       setError(err?.message ?? 'Registration failed')
     } finally {

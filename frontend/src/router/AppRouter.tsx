@@ -3,7 +3,6 @@ import Login from '../components/Auth/Login'
 import Register from '../components/Auth/Register'
 import ForgotPassword from '../components/Auth/ForgotPassword'
 import ResetPassword from '../components/Auth/ResetPassword'
-import VerifyEmail from '../components/Auth/VerifyEmail'
 import Deployment from '../pages/Deployment'
 import DeploymentDetails from '../pages/DeploymentDetails'
 import { useAuth } from '../hooks/useAuth'
@@ -52,7 +51,6 @@ export default function AppRouter() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/" element={<Protected><RoleRedirect /></Protected>} />
           <Route path="/student" element={<Protected><RoleGate role="student"><DashboardLayout><StudentDashboard /></DashboardLayout></RoleGate></Protected>} />
           <Route path="/student/deployments" element={<Protected><RoleGate role="student"><DashboardLayout><Deployment /></DashboardLayout></RoleGate></Protected>} />

@@ -14,9 +14,12 @@ from app.api import (
     routes_classes,
 )
 from app.models.base import Base
+from app.models.user import User, UserRole
 from app.database.session import engine
 from app.database.init_db import ensure_columns
 from app import models
+from app.core.config import settings
+from app.core.security import get_password_hash
 import logging
 import asyncio
 import time
@@ -283,9 +286,51 @@ async def on_startup():
     # Create tables
     Base.metadata.create_all(bind=engine)
     ensure_columns(engine)
+
+    # Keep local/demo environments aligned with documented default credentials.
+    if settings.SEED_DEMO_USER and settings.APP_ENV.lower() != "production":
+        try:
+            from app.database.session import SessionLocal
+
+            db = SessionLocal()
+            demo_email = settings.DEMO_USER_EMAIL.lower().strip()
+            demo_user = db.query(User).filter(User.email == demo_email).first()
+
+            role_value = settings.DEMO_USER_ROLE.strip().lower()
+            try:
+                demo_role = UserRole(role_value)
+            except ValueError:
+                logger.warning(
+                    "Invalid DEMO_USER_ROLE '%s', defaulting to 'admin'",
+                    settings.DEMO_USER_ROLE,
+                )
+                demo_role = UserRole.admin
+
+            if demo_user is None:
+                demo_user = User(
+                    name=settings.DEMO_USER_NAME,
+                    email=demo_email,
+                    password_hash=get_password_hash(settings.DEMO_USER_PASSWORD),
+                    role=demo_role,
+                    is_verified=True,
+                )
+                db.add(demo_user)
+                db.commit()
+                logger.info("✅ Seeded demo user %s", demo_email)
+            elif settings.DEMO_USER_OVERWRITE:
+                demo_user.name = settings.DEMO_USER_NAME
+                demo_user.password_hash = get_password_hash(settings.DEMO_USER_PASSWORD)
+                demo_user.role = demo_role
+                demo_user.is_verified = True
+                db.commit()
+                logger.info("✅ Refreshed demo user credentials for %s", demo_email)
+
+            db.close()
+        except Exception as e:
+            logger.error(f"⚠️ Error while seeding demo user: {e}")
     
     
-    # Initialize billing pricing models (no fake user seeding by default)
+    # Initialize billing pricing models
     try:
         from app.services.billing_service import BillingService
         from app.database.session import SessionLocal

@@ -1,18 +1,25 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import AuthSplitLayout from './AuthSplitLayout'
 
 export default function Login() {
   const { login } = useAuth()
   const nav = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [unverified, setUnverified] = useState(false)
-  const [resending, setResending] = useState(false)
-  const [resent, setResent] = useState(false)
+  const [registered, setRegistered] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('registered') === '1') {
+      setRegistered(true)
+      searchParams.delete('registered')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,28 +31,8 @@ export default function Login() {
     } catch (err: any) {
       const msg = err?.message ?? 'Login failed'
       setError(msg)
-      if (/verify/i.test(msg)) {
-        setUnverified(true)
-      } else {
-        setUnverified(false)
-      }
     } finally {
       setLoading(false)
-    }
-  }
-
-  const resendVerification = async () => {
-    setResending(true)
-    setResent(false)
-    setError(null)
-    try {
-      const { api } = await import('../../utils/api')
-      await api.requestVerifyEmail(email)
-      setResent(true)
-    } catch (e: any) {
-      setError(e?.message ?? 'Could not resend verification email')
-    } finally {
-      setResending(false)
     }
   }
 
@@ -84,17 +71,12 @@ export default function Login() {
             placeholder="********"
           />
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {unverified && (
-          <div className="text-sm text-slate-700 flex items-center justify-between">
-            <span>Haven't verified your email yet?</span>
-            <button type="button" onClick={resendVerification} disabled={resending}
-              className="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 hover:bg-slate-100">
-              {resending ? 'Sending...' : 'Resend link'}
-            </button>
-          </div>
+        {registered && (
+          <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            Registration complete. Your account is active now, so you can sign in immediately.
+          </p>
         )}
-        {resent && <p className="text-sm text-emerald-700">Verification email sent.</p>}
+        {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex items-center justify-between text-sm">
           <label className="inline-flex items-center gap-2 text-slate-600">
             <input type="checkbox" className="rounded border-slate-300 text-slate-900 focus:ring-slate-500" />

@@ -36,30 +36,11 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         email=payload.email.lower(),
         password_hash=get_password_hash(payload.password),
         role=requested_role,
-        is_verified=True,  # Auto-verify users (email system not configured)
+        is_verified=True,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
-
-    # Create verification token and "send" email
-    token = generate_token()
-    t = UserToken(
-        user_id=user.id,
-        token_hash=hash_token(token),
-        type=TokenType.verify,
-        expires_at=expiry_in(settings.VERIFY_TOKEN_MINUTES),
-    )
-    db.add(t)
-    db.commit()
-
-    # Prefer frontend route so users see a friendly page
-    link = f"{settings.FRONTEND_URL}/verify-email?token={token}"
-    send_email(
-        to=user.email,
-        subject=f"Verify your {settings.APP_NAME} email",
-        body=f"Hi {user.name},\n\nClick to verify your email: {link}\nThis link expires in {settings.VERIFY_TOKEN_MINUTES} minutes.",
-    )
     return user
 
 
@@ -68,10 +49,6 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email.lower()).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
-
-    # Email verification check (users are auto-verified on registration)
-    if not bool(user.is_verified):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified. Please check your inbox for a verification link or resend it from the login page.")
 
     token = create_access_token({
         "sub": str(user.id),

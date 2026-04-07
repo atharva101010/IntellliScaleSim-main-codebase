@@ -1,9 +1,21 @@
-import { useEffect, useState, type ComponentType } from 'react'
+import type { ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Activity, ArrowRight, Clock3, PauseCircle, Server } from 'lucide-react'
+import {
+  ArrowRight,
+  BarChart3,
+  Bot,
+  Boxes,
+  CheckCircle2,
+  CloudCog,
+  Cpu,
+  Gauge,
+  GitBranch,
+  Rocket,
+  ShieldCheck,
+  Workflow,
+} from 'lucide-react'
 
-import { dashboard, DashboardMetrics } from '../utils/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,129 +37,145 @@ const fadeInUp = {
 }
 
 export default function StudentDashboard() {
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetchMetrics()
-    const interval = setInterval(fetchMetrics, 30000)
-    return () => clearInterval(interval)
-  }, [])
-
-  const fetchMetrics = async () => {
-    try {
-      const data = await dashboard.getMetrics()
-      setMetrics(data)
-      setError(null)
-    } catch (fetchError) {
-      console.error('Failed to fetch dashboard metrics:', fetchError)
-      setError('Unable to load dashboard metrics at the moment.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-slate-300 border-t-slate-900" />
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <Card className="border-slate-300">
-        <CardHeader>
-          <CardTitle>Dashboard Unavailable</CardTitle>
-          <CardDescription>{error}</CardDescription>
-        </CardHeader>
-      </Card>
-    )
-  }
-
   return (
     <motion.div className="space-y-8" variants={staggerContainer} initial="hidden" animate="show">
       <motion.div variants={fadeInUp} className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Student Console</h1>
-          <p className="mt-1 text-sm text-slate-500">Real-time orchestration and operational visibility</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Project Overview</h1>
+          <p className="mt-1 text-sm text-slate-500">A guided view of IntelliScaleSim for faster onboarding and hands-on learning.</p>
         </div>
-        <Badge variant={metrics?.system_status === 'healthy' ? 'success' : 'danger'} className="w-fit px-3 py-1 text-xs uppercase tracking-wider">
-          System {metrics?.system_status || 'unknown'}
+        <Badge variant="secondary" className="w-fit px-3 py-1 text-xs uppercase tracking-wider">
+          Learning Platform
         </Badge>
       </motion.div>
 
-      <motion.div variants={fadeInUp} className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <MetricCard
-          title="Total Deployments"
-          value={metrics?.total_containers || 0}
-          icon={Server}
-          description="All provisioned instances"
-        />
-        <MetricCard
-          title="Running Instances"
-          value={metrics?.running_containers || 0}
-          icon={Activity}
-          description="Active and reachable workloads"
-        />
-        <MetricCard
-          title="Dormant States"
-          value={metrics?.stopped_containers || 0}
-          icon={PauseCircle}
-          description="Stopped or paused workloads"
-        />
+      <motion.div variants={fadeInUp}>
+        <Card className="overflow-hidden border-slate-900 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700 text-white">
+          <CardContent className="grid gap-6 p-6 md:grid-cols-12 md:p-8">
+            <div className="md:col-span-8">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">IntelliScaleSim Platform</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight md:text-3xl">Learn Cloud Operations Through Real Simulation</h2>
+              <p className="mt-3 max-w-2xl text-sm text-slate-200">
+                Deploy containerized apps, stress-test them with real traffic, observe auto-scaling behavior,
+                and compare cloud pricing models in one unified environment.
+              </p>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Badge className="bg-white/10 text-white hover:bg-white/20">FastAPI + React</Badge>
+                <Badge className="bg-white/10 text-white hover:bg-white/20">Docker-based Labs</Badge>
+                <Badge className="bg-white/10 text-white hover:bg-white/20">Prometheus + Grafana</Badge>
+                <Badge className="bg-white/10 text-white hover:bg-white/20">AI Cost Insights</Badge>
+              </div>
+            </div>
+
+            <div className="md:col-span-4">
+              <div className="rounded-xl border border-white/20 bg-white/5 p-4">
+                <h3 className="text-sm font-semibold">Start Here</h3>
+                <p className="mt-1 text-xs text-slate-300">Use this sequence for your first complete lab run.</p>
+                <div className="mt-3 space-y-2 text-sm">
+                  <HeroStep icon={Rocket} label="Deploy app" />
+                  <HeroStep icon={Gauge} label="Run load test" />
+                  <HeroStep icon={GitBranch} label="Watch auto-scaling" />
+                  <HeroStep icon={BarChart3} label="Compare cloud costs" />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </motion.div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <motion.div variants={fadeInUp} className="lg:col-span-8">
+        <motion.div variants={fadeInUp} className="space-y-6 lg:col-span-8">
           <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
+            <CardHeader>
               <div>
-                <CardTitle>Load Test History</CardTitle>
-                <CardDescription>Recent execution activity and latency overview</CardDescription>
+                <CardTitle>What Is IntelliScaleSim?</CardTitle>
+                <CardDescription>
+                  IntelliScaleSim is a cloud orchestration simulator that helps you deploy containers, run load tests,
+                  watch scaling behavior, and compare infrastructure costs.
+                </CardDescription>
               </div>
-              <Badge variant="secondary">Live Feed</Badge>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <h3 className="text-sm font-semibold text-slate-900">Core Learning Workflow</h3>
+                <ul className="mt-2 space-y-2 text-sm text-slate-600">
+                  <li>1. Deploy a containerized application from the Deployments section.</li>
+                  <li>2. Monitor resource behavior and service health in Monitoring.</li>
+                  <li>3. Trigger traffic using Load Testing to simulate real usage.</li>
+                  <li>4. Review scaling response and compare pricing in Billing.</li>
+                </ul>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <FeatureCard
+                  icon={Boxes}
+                  title="Container Deployment"
+                  description="Launch workloads from Docker images and manage runtime settings."
+                />
+                <FeatureCard
+                  icon={Gauge}
+                  title="Load Testing"
+                  description="Generate controlled traffic to study latency and throughput."
+                />
+                <FeatureCard
+                  icon={GitBranch}
+                  title="Auto-Scaling"
+                  description="Observe scale-up and scale-down behavior under changing demand."
+                />
+                <FeatureCard
+                  icon={BarChart3}
+                  title="Cost Visibility"
+                  description="Estimate and compare cloud costs across AWS, GCP, and Azure."
+                />
+                <FeatureCard
+                  icon={Workflow}
+                  title="Workflow Learning"
+                  description="Practice a production-like DevOps flow in a safe simulation environment."
+                />
+                <FeatureCard
+                  icon={ShieldCheck}
+                  title="Operational Awareness"
+                  description="Build confidence with monitoring, reliability, and performance trade-offs."
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Learning Journey</CardTitle>
+              <CardDescription>Follow this path to complete your first end-to-end scenario.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {metrics?.recent_load_tests?.length ? (
-                metrics.recent_load_tests.map((test) => (
-                  <div key={test.id} className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <div className="text-sm font-semibold text-slate-900">Sequence {test.id}</div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        <Clock3 className="mr-1 inline h-3.5 w-3.5" />
-                        {new Date(test.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}{' '}
-                        {new Date(test.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <div className="text-[11px] uppercase tracking-wide text-slate-500">Requests</div>
-                        <div className="text-lg font-semibold text-slate-900">{test.requests}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[11px] uppercase tracking-wide text-slate-500">Latency</div>
-                        <div className="text-lg font-semibold text-slate-900">{test.avg_response_time?.toFixed(1) || '--'} ms</div>
-                      </div>
-                      <Link to="/student/loadtest" aria-label="Open load testing page">
-                        <Button variant="outline" size="sm">
-                          Open
-                          <ArrowRight className="h-4 w-4" />
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
-                  <p className="text-sm text-slate-500">No load tests recorded yet.</p>
-                  <Link to="/student/loadtest" className="mt-4 inline-flex">
-                    <Button size="sm">Start Load Test</Button>
-                  </Link>
-                </div>
-              )}
+              <JourneyStep
+                number="01"
+                title="Deploy a Practice Application"
+                description="Create your first running container and verify endpoint health."
+                ctaLabel="Open Deployments"
+                to="/student/deployments"
+              />
+              <JourneyStep
+                number="02"
+                title="Generate Controlled Traffic"
+                description="Run short tests to measure latency, throughput, and behavior under load."
+                ctaLabel="Open Load Testing"
+                to="/student/loadtest"
+              />
+              <JourneyStep
+                number="03"
+                title="Observe System Behavior"
+                description="Track resource usage, service trends, and stability from monitoring dashboards."
+                ctaLabel="Open Monitoring"
+                to="/student/monitoring"
+              />
+              <JourneyStep
+                number="04"
+                title="Review Cost & Recommendations"
+                description="Compare cloud pricing outcomes and use insights to optimize settings."
+                ctaLabel="Open Billing"
+                to="/student/billing"
+              />
             </CardContent>
           </Card>
         </motion.div>
@@ -156,24 +184,54 @@ export default function StudentDashboard() {
           <Card className="border-slate-900 bg-slate-900 text-white">
             <CardHeader>
               <CardTitle className="text-white">Quick Actions</CardTitle>
-              <CardDescription className="text-slate-300">Fast access to frequent workflows</CardDescription>
+              <CardDescription className="text-slate-300">Start with the most useful pages</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <QuickAction to="/student/loadtest" label="New Load Test" />
               <QuickAction to="/student/deployments" label="Deploy Instance" />
+              <QuickAction to="/student/loadtest" label="Run Load Test" />
               <QuickAction to="/student/monitoring" label="System Monitoring" />
+              <QuickAction to="/student/billing" label="Open Billing" />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Operational Environment</CardTitle>
-              <CardDescription>Current workspace profile</CardDescription>
+              <CardTitle>Application Highlights</CardTitle>
+              <CardDescription>What this project focuses on</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <EnvironmentRow label="Cluster" value="sim-eu-west-1" />
-              <EnvironmentRow label="Scaling" value="Reactive v2" />
-              <EnvironmentRow label="Tier" value="Pro Developer" />
+              <EnvironmentRow label="Purpose" value="Cloud orchestration learning" />
+              <EnvironmentRow label="Engine" value="FastAPI + React + Docker" />
+              <EnvironmentRow label="Monitoring" value="Prometheus + Grafana" />
+              <EnvironmentRow label="Intelligence" value="AI-powered cost guidance" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Technology Stack</CardTitle>
+              <CardDescription>Core tools used in this project</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-2">
+              <StackPill icon={CloudCog} label="Docker" />
+              <StackPill icon={Cpu} label="FastAPI" />
+              <StackPill icon={Workflow} label="React" />
+              <StackPill icon={BarChart3} label="Grafana" />
+              <StackPill icon={Gauge} label="Prometheus" />
+              <StackPill icon={Bot} label="AI Insights" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Success Checklist</CardTitle>
+              <CardDescription>Target outcomes for your first lab</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-slate-600">
+              <ChecklistItem text="Deploy at least one application" />
+              <ChecklistItem text="Capture load test metrics" />
+              <ChecklistItem text="Observe scaling triggers" />
+              <ChecklistItem text="Compare 3 cloud pricing models" />
             </CardContent>
           </Card>
         </motion.div>
@@ -182,30 +240,82 @@ export default function StudentDashboard() {
   )
 }
 
-function MetricCard({
-  title,
-  value,
-  description,
+function FeatureCard({
   icon: Icon,
+  title,
+  description,
 }: {
-  title: string
-  value: number
-  description: string
   icon: ComponentType<{ className?: string }>
+  title: string
+  description: string
 }) {
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardDescription className="text-xs uppercase tracking-wide">{title}</CardDescription>
-        <CardTitle className="flex items-center justify-between text-3xl font-semibold text-slate-900">
-          {value}
-          <Icon className="h-5 w-5 text-slate-500" />
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-slate-500">{description}</p>
-      </CardContent>
-    </Card>
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <Icon className="h-4 w-4 text-slate-500" />
+        <h4 className="text-sm font-semibold text-slate-900">{title}</h4>
+      </div>
+      <p className="text-sm text-slate-600">{description}</p>
+    </div>
+  )
+}
+
+function HeroStep({ icon: Icon, label }: { icon: ComponentType<{ className?: string }>; label: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-white/5 px-2.5 py-2 text-slate-100">
+      <Icon className="h-4 w-4 text-slate-300" />
+      <span className="text-sm">{label}</span>
+    </div>
+  )
+}
+
+function JourneyStep({
+  number,
+  title,
+  description,
+  ctaLabel,
+  to,
+}: {
+  number: string
+  title: string
+  description: string
+  ctaLabel: string
+  to: string
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Step {number}</p>
+          <h4 className="mt-1 text-sm font-semibold text-slate-900">{title}</h4>
+          <p className="mt-1 text-sm text-slate-600">{description}</p>
+        </div>
+        <Link to={to}>
+          <Button variant="outline" size="sm">
+            {ctaLabel}
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+function StackPill({ icon: Icon, label }: { icon: ComponentType<{ className?: string }>; label: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+      <Icon className="h-4 w-4 text-slate-500" />
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+    </div>
+  )
+}
+
+function ChecklistItem({ text }: { text: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <CheckCircle2 className="h-4 w-4 text-slate-500" />
+      <span>{text}</span>
+    </div>
   )
 }
 

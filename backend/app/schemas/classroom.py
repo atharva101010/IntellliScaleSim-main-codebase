@@ -29,7 +29,7 @@ class ClassroomStudentResponse(BaseModel):
     id: int
     name: str
     email: str
-    enrolled_at: datetime
+    enrolled_at: Optional[datetime] = None
 
 
 class ClassroomEnrollmentAction(BaseModel):

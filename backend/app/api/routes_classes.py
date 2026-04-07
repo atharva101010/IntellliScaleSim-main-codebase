@@ -145,6 +145,48 @@ def list_classroom_students(
     ]
 
 
+@router.get("/teacher/{classroom_id}/available-students", response_model=List[ClassroomStudentResponse])
+def list_available_students(
+    classroom_id: int,
+    current_user: User = Depends(require_roles(UserRole.teacher, UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    """Get list of students not yet enrolled in the classroom."""
+    classroom = db.query(Classroom).filter(Classroom.id == classroom_id).first()
+    if not classroom:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+
+    if not _can_manage_classroom(current_user, classroom):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    # Get all students except those already enrolled
+    enrolled_ids = (
+        db.query(ClassEnrollment.student_id)
+        .filter(ClassEnrollment.classroom_id == classroom_id)
+        .subquery()
+    )
+
+    available_students = (
+        db.query(User)
+        .filter(
+            User.role == UserRole.student,
+            User.id.notin_(enrolled_ids),
+        )
+        .order_by(User.name.asc())
+        .all()
+    )
+
+    return [
+        ClassroomStudentResponse(
+            id=student.id,
+            name=student.name,
+            email=student.email,
+            enrolled_at=None,
+        )
+        for student in available_students
+    ]
+
+
 @router.post("/teacher/{classroom_id}/students/{student_id}", response_model=ClassroomEnrollmentAction)
 def enroll_student(
     classroom_id: int,
