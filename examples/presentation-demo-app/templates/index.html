@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IntelliScaleSim Demo Console</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <div class="noise"></div>
+
+  <main class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Presentation Mode</p>
+        <h1>Demo Commerce Control Room</h1>
+        <p class="subhead">
+          Realistic traffic, stress controls, and live telemetry for IntelliScaleSim autoscaling demos.
+        </p>
+      </div>
+      <div class="hero-actions">
+        <button id="refreshStatsBtn" class="btn btn-secondary">Refresh Stats</button>
+        <button id="runSmokeBtn" class="btn btn-primary">Run Smoke Test</button>
+      </div>
+    </header>
+
+    <section class="kpis" id="kpiGrid">
+      <article class="kpi-card">
+        <p>Requests</p>
+        <h2 id="kpiRequests">0</h2>
+      </article>
+      <article class="kpi-card">
+        <p>Avg Latency</p>
+        <h2 id="kpiLatency">0 ms</h2>
+      </article>
+      <article class="kpi-card">
+        <p>Active Requests</p>
+        <h2 id="kpiActive">0</h2>
+      </article>
+      <article class="kpi-card">
+        <p>Errors</p>
+        <h2 id="kpiErrors">0</h2>
+      </article>
+    </section>
+
+    <section class="layout-grid">
+      <article class="panel panel-wide">
+        <div class="panel-head">
+          <h3>Live Latency Trend</h3>
+          <p>Auto-sampling every 4 seconds</p>
+        </div>
+        <div class="chart-wrap">
+          <svg id="latencyChart" viewBox="0 0 600 180" preserveAspectRatio="none"></svg>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h3>Catalog Explorer</h3>
+          <p>Quick real-world traffic endpoint</p>
+        </div>
+        <form id="catalogForm" class="form-grid">
+          <label>Page
+            <input type="number" name="page" value="1" min="1" max="50" />
+          </label>
+          <label>Page Size
+            <input type="number" name="page_size" value="8" min="1" max="100" />
+          </label>
+          <label>Sort
+            <select name="sort">
+              <option value="id">ID</option>
+              <option value="price">Price</option>
+              <option value="rating">Rating</option>
+            </select>
+          </label>
+          <button type="submit" class="btn btn-primary">Fetch Catalog</button>
+        </form>
+        <pre class="result-box" id="catalogResult">Run request to inspect response...</pre>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h3>Search</h3>
+          <p>User behavior simulation</p>
+        </div>
+        <form id="searchForm" class="form-grid">
+          <label>Query
+            <input type="text" name="q" value="cloud widget" />
+          </label>
+          <label>Limit
+            <input type="number" name="limit" value="10" min="1" max="50" />
+          </label>
+          <button type="submit" class="btn btn-primary">Run Search</button>
+        </form>
+        <pre class="result-box" id="searchResult">Search results will appear here...</pre>
+      </article>
+
+      <article class="panel panel-wide">
+        <div class="panel-head">
+          <h3>Stress & Load Trigger Console</h3>
+          <p>Use these to force autoscaling visually</p>
+        </div>
+        <div class="stress-grid">
+          <form id="cpuForm" class="mini-form">
+            <h4>CPU Spike</h4>
+            <label>Complexity
+              <input type="number" name="complexity" value="7000" min="800" max="12000" />
+            </label>
+            <button class="btn btn-accent" type="submit">Run CPU Task</button>
+          </form>
+
+          <form id="memoryForm" class="mini-form">
+            <h4>Memory Spike</h4>
+            <label>Size (MB)
+              <input type="number" name="size_mb" value="80" min="5" max="250" />
+            </label>
+            <label>Hold (ms)
+              <input type="number" name="hold_ms" value="1200" min="100" max="5000" />
+            </label>
+            <button class="btn btn-accent" type="submit">Run Memory Task</button>
+          </form>
+
+          <form id="ioForm" class="mini-form">
+            <h4>IO Burst</h4>
+            <label>Size (KB)
+              <input type="number" name="size_kb" value="1024" min="64" max="4096" />
+            </label>
+            <button class="btn btn-accent" type="submit">Run IO Task</button>
+          </form>
+
+          <form id="checkoutForm" class="mini-form">
+            <h4>Checkout Load</h4>
+            <label>Fraud Rounds
+              <input type="number" name="fraud_check_rounds" value="25000" min="2000" max="120000" />
+            </label>
+            <button class="btn btn-accent" type="submit">Create Checkout</button>
+          </form>
+        </div>
+        <pre class="result-box" id="stressResult">Stress operation output...</pre>
+      </article>
+    </section>
+
+    <section class="toast" id="toast"></section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

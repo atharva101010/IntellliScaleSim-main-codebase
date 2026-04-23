@@ -11,7 +11,7 @@ from http import HTTPStatus
 from typing import Dict, List
 from uuid import uuid4
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
 
 APP_NAME = "IntelliScaleSim Presentation Demo App"
@@ -172,6 +172,7 @@ def home():
             "version": APP_VERSION,
             "environment": ENVIRONMENT,
             "endpoints": [
+                "/ui",
                 "/healthz",
                 "/readyz",
                 "/api/catalog",
@@ -185,6 +186,11 @@ def home():
             ],
         }
     )
+
+
+@app.get("/ui")
+def ui_home():
+    return render_template("index.html")
 
 
 @app.get("/healthz")

@@ -6,6 +6,7 @@ This is a deploy-ready demo application for your final presentation. It looks li
 
 - Realistic endpoints: catalog, search, checkout
 - Predictable stress endpoints: CPU, memory, and IO
+- Built-in presentation UI at `/ui` with live KPI cards and controls
 - Health check endpoint for availability proof
 - Prometheus-style `/metrics` endpoint
 - Structured JSON responses with request tracing (`X-Request-Id`)
@@ -16,6 +17,7 @@ This is a deploy-ready demo application for your final presentation. It looks li
 ## Endpoints
 
 - `GET /` service metadata
+- `GET /ui` web frontend dashboard
 - `GET /healthz` health check
 - `GET /readyz` readiness check
 - `GET /api/catalog?page=1&page_size=20`
@@ -36,6 +38,8 @@ python app.py
 ```
 
 Open: `http://localhost:5000/healthz`
+
+Open UI: `http://localhost:5000/ui`
 
 ## Runtime environment variables
 
@@ -79,22 +83,23 @@ In IntelliScaleSim, deploy this image:
 ## Recommended final-presentation scenario
 
 1. Deploy this app in IntelliScaleSim.
-2. Create autoscaling policy:
+2. Open `/ui` and keep it visible for live KPI updates while testing.
+3. Create autoscaling policy:
    - CPU up: `55%`
    - CPU down: `20%`
    - Memory up: `70%`
    - Memory down: `30%`
    - Min replicas: `1`
    - Max replicas: `5`
-3. In Load Testing page, hit one of these paths:
+4. In Load Testing page, hit one of these paths:
    - CPU-heavy: `/api/work/cpu?complexity=7000`
    - Memory-heavy: `/api/work/memory?size_mb=80&hold_ms=1500`
    - Mixed realistic: `/api/checkout`
-4. Start with:
+5. Start with:
    - RPS: `80-150`
    - Duration: `120s`
    - Concurrency: `25-60`
-5. Open Monitoring dashboard and show:
+6. Open Monitoring dashboard and show:
    - CPU/memory increase
    - scale-up events
    - throughput and latency changes
