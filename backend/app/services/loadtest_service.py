@@ -4,6 +4,7 @@ Executes load tests with async HTTP requests and metrics collection
 """
 import asyncio
 import os
+import socket
 import statistics
 import time
 from datetime import datetime, timezone
@@ -52,7 +53,16 @@ class LoadTestService:
 
             replacement_host = os.getenv("LOADTEST_LOCALHOST_HOST")
             if not replacement_host:
-                replacement_host = "host.docker.internal" if self._is_running_inside_container() else "localhost"
+                replacement_host = "localhost"
+                if self._is_running_inside_container():
+                    # Only rewrite localhost when the Docker host alias actually resolves.
+                    for candidate in ("host.docker.internal", "gateway.docker.internal"):
+                        try:
+                            socket.getaddrinfo(candidate, None)
+                            replacement_host = candidate
+                            break
+                        except socket.gaierror:
+                            continue
 
             netloc = replacement_host
             if parsed.port:

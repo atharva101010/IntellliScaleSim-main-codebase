@@ -130,6 +130,33 @@ class AutoScalerService:
         while candidate in used_ports:
             candidate += 1
         return candidate
+
+    def _cleanup_inactive_replicas(self, parent_container_id: int) -> int:
+        """Delete non-running replica records (and Docker containers if present)."""
+        removed_count = 0
+        inactive_replicas = self.db.query(Container).filter(
+            Container.parent_id == parent_container_id,
+            Container.status != ContainerStatus.running,
+        ).all()
+
+        for replica in inactive_replicas:
+            try:
+                if replica.container_id and self.docker_service.container_exists(replica.container_id):
+                    self.docker_service.remove_container(replica.container_id, force=True)
+
+                self.db.delete(replica)
+                self.db.commit()
+                removed_count += 1
+                logger.info(
+                    f"Cleaned up inactive replica {replica.id} for parent container {parent_container_id}"
+                )
+            except Exception as cleanup_err:
+                self.db.rollback()
+                logger.warning(
+                    f"Failed to clean inactive replica {replica.id} for parent container {parent_container_id}: {cleanup_err}"
+                )
+
+        return removed_count
     
     async def get_container_metrics(self, container_id: int) -> Optional[dict]:
         """Get current CPU and memory metrics for a container"""
@@ -212,12 +239,28 @@ class AutoScalerService:
             if time_since_scale < policy.cooldown_period:
                 return False, "cooldown_active"
         
-        # Check both CPU and memory are below thresholds
+        # Scale-down semantics:
+        # - If both thresholds are > 0, require both to be low (stable downscale signal).
+        # - If one threshold is 0, treat that metric as disabled and evaluate only the other.
+        # - If both are 0, no scale-down trigger can be evaluated.
         cpu_val = metrics.get('cpu_percent', 0)
         mem_val = metrics.get('memory_percent', 0)
-        if (cpu_val < policy.scale_down_cpu_threshold and 
-            mem_val < policy.scale_down_memory_threshold):
-            return True, "both_low"
+
+        cpu_threshold_enabled = policy.scale_down_cpu_threshold > 0
+        mem_threshold_enabled = policy.scale_down_memory_threshold > 0
+
+        if not cpu_threshold_enabled and not mem_threshold_enabled:
+            return False, "no_scale_down_thresholds_enabled"
+
+        cpu_low = cpu_val < policy.scale_down_cpu_threshold if cpu_threshold_enabled else True
+        mem_low = mem_val < policy.scale_down_memory_threshold if mem_threshold_enabled else True
+
+        if cpu_low and mem_low:
+            if cpu_threshold_enabled and mem_threshold_enabled:
+                return True, "both_low"
+            if cpu_threshold_enabled:
+                return True, "cpu"
+            return True, "memory"
         
         return False, "thresholds_not_met"
     
@@ -346,12 +389,12 @@ class AutoScalerService:
                 try:
                     logger.info(f"Scaling down: Stopping and removing Docker container {replica.container_id[:12]}")
                     self.docker_service.stop_container(replica.container_id)
-                    self.docker_service.remove_container(replica.container_id)
+                    self.docker_service.remove_container(replica.container_id, force=True)
                 except Exception as docker_err:
                     logger.warning(f"Failed to remove Docker container during scale down: {docker_err}")
-            
-            replica.status = ContainerStatus.stopped
-            replica.stopped_at = datetime.now(timezone.utc)
+
+            replica_name = replica.name
+            self.db.delete(replica)
             
             # Log scaling event
             event = ScalingEvent(
@@ -370,7 +413,10 @@ class AutoScalerService:
             
             self.db.commit()
             
-            logger.info(f"Scaled down container {policy.container_id}: {current_replicas} → {current_replicas - 1}")
+            logger.info(
+                f"Scaled down container {policy.container_id}: {current_replicas} → {current_replicas - 1}. "
+                f"Replica '{replica_name}' deleted."
+            )
             return True
             
         except Exception as e:
@@ -406,6 +452,12 @@ class AutoScalerService:
                 if not self.docker_service.container_exists(container.container_id):
                     self._cleanup_stale_policy_reference(policy, container, "docker_container_missing")
                     return
+
+            cleaned = self._cleanup_inactive_replicas(policy.container_id)
+            if cleaned:
+                logger.info(
+                    f"Policy {policy.id}: removed {cleaned} inactive replica(s) for container {policy.container_id}"
+                )
 
             # Get current metrics
             metrics = await self.get_container_metrics(policy.container_id)
@@ -452,8 +504,16 @@ class AutoScalerService:
                     )
                     return
 
-                logger.info(f"Scaling down container {policy.container_id} due to low resource usage")
-                self.scale_down(policy, "both_low", min(metrics['cpu_percent'], metrics['memory_percent']))
+                metric_key = f"{reason}_percent"
+                metric_value = (
+                    metrics.get(metric_key)
+                    if reason in {"cpu", "memory"}
+                    else min(metrics['cpu_percent'], metrics['memory_percent'])
+                )
+                logger.info(
+                    f"Scaling down container {policy.container_id} due to {reason}: {metric_value}%"
+                )
+                self.scale_down(policy, reason, metric_value)
                 state["scale_down_streak"] = 0
                 return
 

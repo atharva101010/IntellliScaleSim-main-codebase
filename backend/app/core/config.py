@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     DOCKER_HUB_USERNAME: Optional[str] = None
     DOCKER_HUB_PASSWORD: Optional[str] = None
 
+    # Encryption key used for stored deployment secrets.
+    # If not set, JWT secret is used as a deterministic fallback.
+    SECRETS_ENCRYPTION_KEY: Optional[str] = None
+
     # Logging
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"

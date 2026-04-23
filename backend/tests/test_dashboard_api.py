@@ -47,4 +47,6 @@ def test_get_dashboard_metrics():
 def test_health_check():
     response = client.get("/healthz")
     assert response.status_code == 200
-    assert response.json() == {"status": "healthy"}
+    payload = response.json()
+    assert payload["status"] == "healthy"
+    assert "services" in payload

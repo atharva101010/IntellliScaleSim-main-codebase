@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api, loadTestApi, type LoadTestProfile, API_BASE } from '../utils/api'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
+import { useNavigate } from 'react-router-dom'
 
 interface Container {
     id: number
@@ -70,6 +71,7 @@ const DEFAULT_PROFILES: LoadTestProfile[] = [
 ]
 
 export default function LoadTesting() {
+    const navigate = useNavigate()
     const [containers, setContainers] = useState<Container[]>([])
     const [config, setConfig] = useState<LoadTestConfig>({
         containerId: null,
@@ -86,6 +88,7 @@ export default function LoadTesting() {
     const [showHistory, setShowHistory] = useState(false)
     const [profiles, setProfiles] = useState<LoadTestProfile[]>(DEFAULT_PROFILES)
     const [selectedProfile, setSelectedProfile] = useState<LoadTestProfile['name'] | null>(null)
+    const [downloadingReportId, setDownloadingReportId] = useState<string | null>(null)
 
     const ACTIVE_TEST_KEY = 'active_load_test_id'
     const HISTORY_KEY = 'load_test_history'
@@ -320,6 +323,84 @@ export default function LoadTesting() {
         }
     }
 
+    const sanitizeFilename = (name: string): string => {
+        const sanitized = (name || 'application').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+        return sanitized || 'application'
+    }
+
+    const extractFilename = (disposition: string | null, fallbackContainerName: string): string => {
+        const fallback = `${sanitizeFilename(fallbackContainerName)}-test.pdf`
+        if (!disposition) return fallback
+
+        const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i)
+        const raw = match?.[1] || match?.[2]
+        if (!raw) return fallback
+
+        try {
+            return decodeURIComponent(raw)
+        } catch {
+            return raw
+        }
+    }
+
+    const downloadPdfReport = async (result: TestResult) => {
+        if (result.status !== 'completed') {
+            alert('PDF report is available only for completed tests.')
+            return
+        }
+
+        setDownloadingReportId(result.id)
+        const controller = new AbortController()
+        const timeout = window.setTimeout(() => controller.abort(), 15000)
+        try {
+            const token = localStorage.getItem('token')
+            if (!token) {
+                alert('Session expired. Please log in again.')
+                navigate('/login')
+                return
+            }
+
+            const response = await fetch(`${API_BASE}/loadtest/${result.id}/report/pdf`, {
+                headers: { Authorization: `Bearer ${token}` },
+                signal: controller.signal,
+            })
+
+            if (response.status === 401) {
+                localStorage.removeItem('token')
+                sessionStorage.removeItem(ACTIVE_TEST_KEY)
+                alert('Your session has expired. Please log in again.')
+                navigate('/login')
+                return
+            }
+
+            if (!response.ok) {
+                const message = await parseErrorMessage(response)
+                alert(message || 'Failed to download PDF report')
+                return
+            }
+
+            const blob = await response.blob()
+            const filename = extractFilename(response.headers.get('content-disposition'), result.container)
+            const blobUrl = window.URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = blobUrl
+            link.download = filename
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            window.URL.revokeObjectURL(blobUrl)
+        } catch (error: any) {
+            if (error?.name === 'AbortError') {
+                alert('Download timed out. Please try again.')
+            } else {
+                alert(error?.message || 'Failed to download PDF report')
+            }
+        } finally {
+            window.clearTimeout(timeout)
+            setDownloadingReportId(null)
+        }
+    }
+
     if (showHistory) {
         return (
             <div className="space-y-6">
@@ -360,6 +441,7 @@ export default function LoadTesting() {
                                             <th className="text-left py-4 px-6 font-bold text-slate-900">Response Time (avg)</th>
                                             <th className="text-left py-4 px-6 font-bold text-slate-900">Peak CPU</th>
                                             <th className="text-left py-4 px-6 font-bold text-slate-900">Peak Memory</th>
+                                            <th className="text-left py-4 px-6 font-bold text-slate-900">Report</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -384,6 +466,15 @@ export default function LoadTesting() {
                                                 <td className="py-4 px-6 text-slate-700">{result.avg_response_time.toFixed(0)}ms</td>
                                                 <td className="py-4 px-6 font-bold text-slate-900">{result.peak_cpu.toFixed(1)}%</td>
                                                 <td className="py-4 px-6 font-bold text-slate-900">{result.peak_memory.toFixed(0)}MB</td>
+                                                <td className="py-4 px-6">
+                                                    <button
+                                                        onClick={() => downloadPdfReport(result)}
+                                                        disabled={result.status !== 'completed' || downloadingReportId === result.id}
+                                                        className="px-3 py-1.5 rounded-md text-xs font-semibold border border-slate-300 bg-white text-slate-900 hover:bg-slate-100 disabled:opacity-50"
+                                                    >
+                                                        {downloadingReportId === result.id ? 'Downloading...' : 'Download PDF'}
+                                                    </button>
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
