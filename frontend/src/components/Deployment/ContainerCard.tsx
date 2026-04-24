@@ -1,5 +1,6 @@
 import { Container } from '../../utils/api'
 import { formatDistanceToNow } from 'date-fns'
+import { API_BASE } from '../../utils/api'
 import { getReachableServiceUrl } from '../../utils/runtimeUrls'
 
 interface ContainerCardProps {
@@ -25,6 +26,10 @@ export default function ContainerCard({
     onViewDetails,
 }: ContainerCardProps) {
     const serviceUrl = getReachableServiceUrl(container.public_url || container.localhost_url, container.port || undefined)
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+    const proxyUrl = container.id && token
+        ? `${API_BASE}/containers/${container.id}/proxy-auth?token=${encodeURIComponent(token)}`
+        : null
 
     const getRelativeTime = (dateStr: string) => {
         try {
@@ -57,7 +62,7 @@ export default function ContainerCard({
                     <div className="flex items-center justify-between text-sm">
                         <span className="text-slate-600">URL:</span>
                         <a
-                            href={serviceUrl}
+                            href={proxyUrl || serviceUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="font-semibold text-slate-800 hover:text-slate-900 hover:underline"

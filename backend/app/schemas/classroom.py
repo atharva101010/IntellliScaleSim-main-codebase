@@ -34,3 +34,17 @@ class ClassroomStudentResponse(BaseModel):
 
 class ClassroomEnrollmentAction(BaseModel):
     message: str
+
+
+class StudentClassroomResponse(BaseModel):
+    id: int
+    name: str
+    code: str
+    description: Optional[str]
+    semester: str
+    status: str
+    max_students: int
+    student_count: int
+    deployments_count: int
+    created_at: datetime
+    enrolled_at: Optional[datetime] = None

@@ -12,6 +12,7 @@ from app.schemas.classroom import (
     ClassroomCreate,
     ClassroomEnrollmentAction,
     ClassroomResponse,
+    StudentClassroomResponse,
     ClassroomStudentResponse,
 )
 
@@ -111,6 +112,41 @@ def create_teacher_class(
     db.refresh(classroom)
 
     return _to_classroom_response(db, classroom)
+
+
+@router.get("/student", response_model=List[StudentClassroomResponse])
+def list_student_classes(
+    current_user: User = Depends(require_roles(UserRole.student)),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(Classroom, ClassEnrollment)
+        .join(ClassEnrollment, ClassEnrollment.classroom_id == Classroom.id)
+        .filter(ClassEnrollment.student_id == current_user.id)
+        .order_by(ClassEnrollment.created_at.desc())
+        .all()
+    )
+
+    response: List[StudentClassroomResponse] = []
+    for classroom, enrollment in rows:
+        classroom_response = _to_classroom_response(db, classroom)
+        response.append(
+            StudentClassroomResponse(
+                id=classroom_response.id,
+                name=classroom_response.name,
+                code=classroom_response.code,
+                description=classroom_response.description,
+                semester=classroom_response.semester,
+                status=classroom_response.status,
+                max_students=classroom_response.max_students,
+                student_count=classroom_response.student_count,
+                deployments_count=classroom_response.deployments_count,
+                created_at=classroom_response.created_at,
+                enrolled_at=enrollment.created_at,
+            )
+        )
+
+    return response
 
 
 @router.get("/teacher/{classroom_id}/students", response_model=List[ClassroomStudentResponse])

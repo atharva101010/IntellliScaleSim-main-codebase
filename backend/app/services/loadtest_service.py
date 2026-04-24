@@ -139,7 +139,6 @@ class LoadTestService:
         }
 
         start_time = time.time()
-        stop_at = time.monotonic() + test.duration_seconds
 
         metrics_task = asyncio.create_task(self._collect_metrics(test, results, start_time, db))
 
@@ -171,9 +170,6 @@ class LoadTestService:
                     if sleep_for > 0:
                         await asyncio.sleep(sleep_for)
 
-                    if time.monotonic() >= stop_at:
-                        return
-
                     results["active"] = int(results["active"]) + 1
                     results["sent"] = int(results["sent"]) + 1
 
@@ -200,7 +196,7 @@ class LoadTestService:
                         results["active"] = max(0, int(results["active"]) - 1)
 
                 async def worker():
-                    while time.monotonic() < stop_at:
+                    while True:
                         try:
                             _, scheduled_offset = work_queue.get_nowait()
                         except asyncio.QueueEmpty:
@@ -212,16 +208,7 @@ class LoadTestService:
                             work_queue.task_done()
 
                 workers = [asyncio.create_task(worker()) for _ in range(worker_count)]
-
-                try:
-                    await asyncio.wait_for(
-                        asyncio.gather(*workers, return_exceptions=True),
-                        timeout=test.duration_seconds + 20,
-                    )
-                except asyncio.TimeoutError:
-                    for worker_task in workers:
-                        worker_task.cancel()
-                    await asyncio.gather(*workers, return_exceptions=True)
+                await asyncio.gather(*workers, return_exceptions=True)
         finally:
             metrics_task.cancel()
             try:

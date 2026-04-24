@@ -187,6 +187,7 @@ export default function StudentDashboard() {
               <CardDescription className="text-slate-300">Start with the most useful pages</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              <QuickAction to="/student/classes" label="View My Classes" />
               <QuickAction to="/student/deployments" label="Deploy Instance" />
               <QuickAction to="/student/loadtest" label="Run Load Test" />
               <QuickAction to="/student/monitoring" label="System Monitoring" />

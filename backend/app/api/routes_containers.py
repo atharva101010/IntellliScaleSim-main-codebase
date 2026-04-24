@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi.responses import Response, RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import Optional
 from datetime import datetime, timezone
 import logging
+import httpx
 
 from app.database.session import get_db
 from app.core.security import get_current_user
@@ -108,6 +110,86 @@ def _sync_container_runtime_state(container: Container, docker_service) -> bool:
     return False
 
 
+def _build_proxy_target(container: Container, path: str = "") -> Optional[str]:
+    base_url = container.localhost_url or (f"http://localhost:{container.port}" if container.port else None)
+    if not base_url:
+        return None
+
+    normalized_path = path.lstrip("/")
+    if normalized_path:
+        return f"{base_url.rstrip('/')}/{normalized_path}"
+    return base_url.rstrip("/") + "/"
+
+
+def _request_token(request: Request) -> Optional[str]:
+    token = request.query_params.get("token")
+    if token:
+        return token
+
+    cookie_token = request.cookies.get("intelliscale_proxy_token")
+    if cookie_token:
+        return cookie_token
+
+    authorization = request.headers.get("Authorization", "")
+    if authorization.startswith("Bearer "):
+        return authorization.removeprefix("Bearer ").strip() or None
+
+    return None
+
+
+def _resolve_user_from_token(token: str, db: Session) -> User:
+    from app.core.security import decode_token
+
+    payload = decode_token(token)
+    user_id = payload.get("sub")
+    if user_id is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
+
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    return user
+
+
+async def _proxy_container_request(container: Container, request: Request, path: str = "") -> Response:
+    target_url = _build_proxy_target(container, path)
+    if not target_url:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Container has no accessible URL")
+
+    headers = {
+        key: value
+        for key, value in request.headers.items()
+        if key.lower() not in {"host", "content-length", "connection", "accept-encoding"}
+    }
+
+    body = await request.body()
+    query_string = request.url.query
+    if query_string and "?" not in target_url:
+        target_url = f"{target_url}?{query_string}"
+
+    async with httpx.AsyncClient(follow_redirects=False, timeout=30.0) as client:
+        upstream = await client.request(
+            request.method,
+            target_url,
+            content=body if body else None,
+            headers=headers,
+        )
+
+    response_headers = {
+        key: value
+        for key, value in upstream.headers.items()
+        if key.lower() not in {"content-length", "connection", "content-encoding", "transfer-encoding", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "upgrade"}
+    }
+
+    return Response(
+        content=upstream.content,
+        status_code=upstream.status_code,
+        headers=response_headers,
+        media_type=upstream.headers.get("content-type"),
+    )
+
+
 
 
 @router.get("/docker/status")
@@ -117,6 +199,64 @@ def get_docker_status(
     """Get Docker availability status for health checks."""
     docker_service = get_docker_service()
     return docker_service.get_docker_status()
+
+
+@router.api_route("/{container_id}/proxy", methods=["GET", "HEAD"], include_in_schema=False)
+@router.api_route("/{container_id}/proxy/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+async def proxy_container(
+    container_id: int,
+    request: Request,
+    path: str = "",
+    token: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    resolved_token = token or _request_token(request)
+    if not resolved_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication token is required")
+
+    current_user = _resolve_user_from_token(resolved_token, db)
+
+    container = db.query(Container).filter(Container.id == container_id).first()
+    if not container:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Container not found")
+
+    if not _can_access_container(current_user, container, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    return await _proxy_container_request(container, request, path)
+
+
+@router.get("/{container_id}/proxy-auth", include_in_schema=False)
+async def proxy_container_auth(
+    container_id: int,
+    request: Request,
+    token: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    resolved_token = token or _request_token(request)
+    if not resolved_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication token is required")
+
+    current_user = _resolve_user_from_token(resolved_token, db)
+
+    container = db.query(Container).filter(Container.id == container_id).first()
+    if not container:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Container not found")
+
+    if not _can_access_container(current_user, container, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    proxy_url = str(request.url).split("?")[0].replace("/proxy-auth", "/proxy/")
+    response = RedirectResponse(url=proxy_url, status_code=status.HTTP_302_FOUND)
+    response.set_cookie(
+        key="intelliscale_proxy_token",
+        value=resolved_token,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        max_age=900,
+    )
+    return response
 
 
 @router.get("/docker/images")

@@ -19,6 +19,7 @@ import LoadTesting from '../pages/LoadTesting'
 import Billing from '../pages/Billing'
 import Profile from '../pages/Profile'
 import Classes from '../pages/Classes'
+import StudentClasses from '../pages/StudentClasses'
 import UsersAdmin from '../pages/UsersAdmin'
 import Systems from '../pages/Systems'
 import Settings from '../pages/Settings'
@@ -53,6 +54,7 @@ export default function AppRouter() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/" element={<Protected><RoleRedirect /></Protected>} />
           <Route path="/student" element={<Protected><RoleGate role="student"><DashboardLayout><StudentDashboard /></DashboardLayout></RoleGate></Protected>} />
+          <Route path="/student/classes" element={<Protected><RoleGate role="student"><DashboardLayout><StudentClasses /></DashboardLayout></RoleGate></Protected>} />
           <Route path="/student/deployments" element={<Protected><RoleGate role="student"><DashboardLayout><Deployment /></DashboardLayout></RoleGate></Protected>} />
           <Route path="/student/deployments/:id" element={<Protected><RoleGate role="student"><DashboardLayout><DeploymentDetails /></DashboardLayout></RoleGate></Protected>} />
           <Route path="/student/guides" element={<Protected><RoleGate role="student"><DashboardLayout><DeploymentGuides /></DashboardLayout></RoleGate></Protected>} />

@@ -52,6 +52,7 @@ export default function Sidebar() {
 
   const studentItems: NavItem[] = [
     { to: '/student', label: 'Overview', icon: LayoutDashboard },
+    { to: '/student/classes', label: 'Classes', icon: Users },
     { to: '/student/deployments', label: 'Deployments', icon: Boxes },
     { to: '/student/monitoring', label: 'Monitoring', icon: Activity },
     { to: '/student/autoscaling', label: 'Auto-Scaling', icon: ArrowUpDown },

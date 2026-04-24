@@ -472,9 +472,28 @@ export interface ClassroomEnrollmentAction {
   message: string;
 }
 
+export interface StudentClass {
+  id: number;
+  name: string;
+  code: string;
+  description?: string | null;
+  semester: string;
+  status: 'active' | 'archived' | 'upcoming';
+  max_students: number;
+  student_count: number;
+  deployments_count: number;
+  created_at: string;
+  enrolled_at: string | null;
+}
+
 export const classesApi = {
   listTeacherClasses: () =>
     request<TeacherClass[]>('/classes/teacher', {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+  listStudentClasses: () =>
+    request<StudentClass[]>('/classes/student', {
       method: 'GET',
       headers: authHeaders(),
     }),
