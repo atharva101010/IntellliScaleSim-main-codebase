@@ -12,6 +12,7 @@ from app.api import (
     routes_profile,
     routes_admin,
     routes_classes,
+    routes_tasks,
 )
 from app.models.base import Base
 from app.models.user import User, UserRole
@@ -176,6 +177,7 @@ app.include_router(routes_dockerhub.router)  # Docker Hub API
 app.include_router(routes_profile.router)    # User Profile API
 app.include_router(routes_admin.router)      # Admin-only system and user management APIs
 app.include_router(routes_classes.router)    # Teacher/admin classroom APIs
+app.include_router(routes_tasks.router)      # Student/teacher task management APIs
 
 logger = logging.getLogger(__name__)
 

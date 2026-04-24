@@ -701,3 +701,91 @@ export const dockerhub = {
       headers: authHeaders(),
     }),
 };
+
+// Task Management APIs
+export interface Task {
+  id: number;
+  classroom_id: number;
+  title: string;
+  description?: string | null;
+  instructions?: string | null;
+  status: 'active' | 'archived' | 'draft';
+  due_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: number;
+}
+
+export interface TaskWithCompletion extends Task {
+  student_completion_status?: 'pending' | 'in_progress' | 'completed' | null;
+  student_completed_at?: string | null;
+}
+
+export interface TaskCompletion {
+  id: number;
+  task_id: number;
+  student_id: number;
+  status: 'pending' | 'in_progress' | 'completed';
+  submission_notes?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+  updated_at: string;
+}
+
+export interface TaskCreate {
+  title: string;
+  description?: string;
+  instructions?: string;
+  due_at?: string;
+}
+
+export interface TaskCompletionCreate {
+  status: 'pending' | 'in_progress' | 'completed';
+  submission_notes?: string;
+}
+
+export const tasksApi = {
+  createTask: (classroomId: number, payload: TaskCreate) =>
+    request<Task>(`/tasks/classroom/${classroomId}`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(payload),
+    }),
+  listClassroomTasks: (classroomId: number) =>
+    request<Task[]>(`/tasks/classroom/${classroomId}`, {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+  listStudentTasks: () =>
+    request<TaskWithCompletion[]>('/tasks/student', {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+  getTask: (taskId: number) =>
+    request<TaskWithCompletion>(`/tasks/${taskId}`, {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+  updateTask: (taskId: number, payload: Partial<TaskCreate>) =>
+    request<Task>(`/tasks/${taskId}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify(payload),
+    }),
+  deleteTask: (taskId: number) =>
+    request<void>(`/tasks/${taskId}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    }),
+  markTaskComplete: (taskId: number, payload: TaskCompletionCreate) =>
+    request<TaskCompletion>(`/tasks/${taskId}/complete`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(payload),
+    }),
+  getTaskCompletion: (taskId: number) =>
+    request<TaskCompletion>(`/tasks/${taskId}/completion`, {
+      method: 'GET',
+      headers: authHeaders(),
+    }),
+};

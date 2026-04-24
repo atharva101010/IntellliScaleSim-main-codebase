@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -14,11 +15,15 @@ import {
   Rocket,
   ShieldCheck,
   Workflow,
+  Loader,
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { tasksApi, type TaskWithCompletion } from '@/utils/api'
+import CompleteTaskModal from '@/components/StudentDashboard/CompleteTaskModal'
+import TaskCard from '@/components/StudentDashboard/TaskCard'
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -37,6 +42,38 @@ const fadeInUp = {
 }
 
 export default function StudentDashboard() {
+  const [tasks, setTasks] = useState<TaskWithCompletion[]>([])
+  const [isLoadingTasks, setIsLoadingTasks] = useState(false)
+  const [selectedTask, setSelectedTask] = useState<TaskWithCompletion | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
+  useEffect(() => {
+    fetchTasks()
+  }, [])
+
+  const fetchTasks = async () => {
+    setIsLoadingTasks(true)
+    try {
+      const data = await tasksApi.listStudentTasks()
+      setTasks(data)
+    } catch (error) {
+      console.error('Failed to fetch tasks:', error)
+    } finally {
+      setIsLoadingTasks(false)
+    }
+  }
+
+  const handleTaskCardClick = (task: TaskWithCompletion) => {
+    setSelectedTask(task)
+    setIsModalOpen(true)
+  }
+
+  const handleTaskComplete = () => {
+    fetchTasks()
+  }
+
+  const pendingTasks = tasks.filter(t => t.student_completion_status !== 'completed')
+  const completedTasks = tasks.filter(t => t.student_completion_status === 'completed')
   return (
     <motion.div className="space-y-8" variants={staggerContainer} initial="hidden" animate="show">
       <motion.div variants={fadeInUp} className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -237,6 +274,87 @@ export default function StudentDashboard() {
           </Card>
         </motion.div>
       </div>
+
+      {/* Tasks Section */}
+      <motion.div variants={fadeInUp} className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Assigned Tasks</h2>
+            <p className="mt-1 text-sm text-slate-500">Complete your classroom assignments</p>
+          </div>
+          {tasks.length > 0 && (
+            <div className="text-sm text-slate-600">
+              <span className="font-semibold text-blue-600">{pendingTasks.length}</span> pending,{' '}
+              <span className="font-semibold text-green-600">{completedTasks.length}</span> completed
+            </div>
+          )}
+        </div>
+
+        {isLoadingTasks ? (
+          <Card>
+            <CardContent className="flex items-center justify-center py-12">
+              <div className="flex flex-col items-center gap-3">
+                <Loader className="h-8 w-8 animate-spin text-slate-400" />
+                <p className="text-slate-500">Loading your tasks...</p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : tasks.length === 0 ? (
+          <Card>
+            <CardContent className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <CheckCircle2 className="mx-auto h-12 w-12 text-slate-300" />
+                <p className="mt-4 font-medium text-slate-900">No tasks yet</p>
+                <p className="text-sm text-slate-500">
+                  Your teachers will assign tasks to your classes
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-6">
+            {/* Pending Tasks */}
+            {pendingTasks.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-900">In Progress & Pending</h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {pendingTasks.map(task => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      onCompleteClick={handleTaskCardClick}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Completed Tasks */}
+            {completedTasks.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-900">Completed</h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {completedTasks.map(task => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      onCompleteClick={handleTaskCardClick}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </motion.div>
+
+      {/* Task Modal */}
+      <CompleteTaskModal
+        task={selectedTask}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onTaskComplete={handleTaskComplete}
+      />
     </motion.div>
   )
 }
